@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/BasicEnvelopeSample/BasicEnvelopeSample.csproj" Id="87a7276c-2d85-438c-8a81-3f8ede0e5ef6" />
+  </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path="CONTRIBUTING.md" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Harmony.Format.Core/Harmony.Format.Core.csproj" />
+    <Project Path="src/Harmony.Format.SemanticKernel/Harmony.Format.SemanticKernel.csproj" />
+  </Folder>
+</Solution>

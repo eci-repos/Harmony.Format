@@ -1,0 +1,27 @@
+<|start|>
+system
+<|message|>
+You are a helpful assistant.
+<|end|>
+
+<|start|>
+user
+<|message|>
+Hello! Can you help me?
+<|end|>
+
+<|start|>
+assistant
+<|channel|>
+analysis
+<|message|>
+Let me think...
+<|end|>
+
+<|start|>
+assistant
+<|channel|>
+final
+<|message|>
+Sure, I'm here to help!
+<|end|>
