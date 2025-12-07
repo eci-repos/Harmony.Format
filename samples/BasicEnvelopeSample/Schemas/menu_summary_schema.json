@@ -1,0 +1,75 @@
+﻿{
+   "$id": "https://example.org/menu-summary.schema.json",
+   "$schema": "https://json-schema.org/draft/2020-12/schema",
+   "title": "MenuSummary",
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+      "menu_title": { "type": "string" },
+      "serves": {
+         "type": "integer",
+         "minimum": 1
+      },
+      "total_time_minutes": {
+         "type": "integer",
+         "minimum": 1
+      },
+      "dishes": {
+         "type": "array",
+         "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+               "name": { "type": "string" },
+               "spice_level": {
+                  "type": "string",
+                  "enum": [ "mild", "medium", "hot", "mixed" ]
+               },
+               "vegetarian": { "type": "boolean" }
+            },
+            "required": [ "name", "spice_level", "vegetarian" ]
+         }
+      },
+      "shopping_list": {
+         "type": "array",
+         "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+               "name": { "type": "string" },
+               "quantity": { "type": "number" },
+               "unit": { "type": "string" },
+               "is_in_pantry": { "type": "boolean" },
+               "is_essential": { "type": "boolean" }
+            },
+            "required": [ "name", "is_in_pantry", "is_essential" ]
+         }
+      },
+      "prep_schedule": {
+         "type": "array",
+         "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+               "relative_minute": { "type": "integer" },
+               "label": { "type": "string" },
+               "instructions": { "type": "string" }
+            },
+            "required": [ "relative_minute", "label", "instructions" ]
+         }
+      },
+      "cultural_notes": {
+         "type": "array",
+         "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+               "item": { "type": "string" },
+               "text": { "type": "string" }
+            },
+            "required": [ "item", "text" ]
+         }
+      }
+   },
+   "required": [ "menu_title", "serves", "total_time_minutes", "dishes", "shopping_list", "prep_schedule", "cultural_notes" ]
+}

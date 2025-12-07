@@ -29,6 +29,7 @@ public static class HarmonySchemaValidator
    /// </param>
    public static void Initialize(string schemaFolderPath)
    {
+      // TODO: make sure to pass the json script and remove hardcoded file name
       var path = Path.Combine(schemaFolderPath, "harmony_envelope_schema.json");
       if (!File.Exists(path))
       {

@@ -37,17 +37,18 @@ public sealed class StubToolExecutionService : IToolExecutionService
 
 class Program
 {
-   static async Task Main(string[] args)
+
+   public static async Task ProcessScriptAsync(string? scriptFileName)
    {
       Console.WriteLine("=== Harmony.Format.Core — Basic Envelope Sample ===");
 
-      if (args.Length == 0)
+      if (String.IsNullOrWhiteSpace(scriptFileName))
       {
          Console.WriteLine("Usage: dotnet run <path-to.hrf>");
          return;
       }
 
-      var path = args[0];
+      var path = "Scripts/" + scriptFileName;
       if (!File.Exists(path))
       {
          Console.WriteLine($"File not found: {path}");
@@ -108,6 +109,15 @@ class Program
       else
       {
          Console.WriteLine(result.FinalText);
+      }
+   }
+
+   static async Task Main(string[] args)
+   {
+      foreach (var arg in args)
+      {
+         Console.WriteLine($"Argument: {arg}");
+         await ProcessScriptAsync(arg);
       }
    }
 

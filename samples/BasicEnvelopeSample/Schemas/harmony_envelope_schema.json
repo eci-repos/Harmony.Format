@@ -1,0 +1,148 @@
+﻿{
+   "$id": "https://example.org/harmony-envelope.schema.json",
+   "$schema": "https://json-schema.org/draft/2020-12/schema",
+   "title": "HarmonyEnvelope",
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+      "messages": {
+         "type": "array",
+         "minItems": 1,
+         "items": { "$ref": "#/$defs/Message" }
+      }
+   },
+   "required": [ "messages" ],
+   "$defs": {
+      "Role": {
+         "type": "string",
+         "enum": [ "system", "developer", "user", "assistant", "tool" ]
+      },
+      "Channel": {
+         "type": "string",
+         "enum": [ "analysis", "commentary", "final" ]
+      },
+      "ContentType": {
+         "type": "string",
+         "description": "e.g., 'harmony-script', 'text', 'json'"
+      },
+      "Message": {
+         "type": "object",
+         "additionalProperties": false,
+         "properties": {
+            "role": { "$ref": "#/$defs/Role" },
+            "channel": { "$ref": "#/$defs/Channel" },
+            "recipient": {
+               "type": "string",
+               "description": "Required for assistant commentary tool calls (plugin.function)",
+               "pattern": "^[a-zA-Z0-9_\\-]+\\.[a-zA-Z0-9_\\-]+$"
+            },
+            "contentType": { "$ref": "#/$defs/ContentType" },
+            "content": {
+               "description": "Either a string or structured object",
+               "oneOf": [
+                  { "type": "string" },
+                  { "type": "object" }
+               ]
+            },
+            "termination": {
+               "type": "string",
+               "enum": [ "return", "call", "end" ],
+               "description": "Optional termination marker"
+            }
+         },
+         "required": [ "role", "channel", "content" ]
+      },
+      "HarmonyScript": {
+         "type": "object",
+         "additionalProperties": false,
+         "properties": {
+            "vars": {
+               "type": "object",
+               "additionalProperties": true
+            },
+            "steps": {
+               "type": "array",
+               "items": { "$ref": "#/$defs/Step" },
+               "minItems": 1
+            }
+         },
+         "required": [ "steps" ]
+      },
+      "Step": {
+         "oneOf": [
+            { "$ref": "#/$defs/ExtractInputStep" },
+            { "$ref": "#/$defs/ToolCallStep" },
+            { "$ref": "#/$defs/IfStep" },
+            { "$ref": "#/$defs/AssistantMessageStep" },
+            { "$ref": "#/$defs/HaltStep" }
+         ]
+      },
+      "ExtractInputStep": {
+         "type": "object",
+         "additionalProperties": false,
+         "properties": {
+            "type": { "const": "extract-input" },
+            "output": {
+               "type": "object",
+               "additionalProperties": { "type": "string" },
+               "description": "varName -> expression (e.g., $input.cuisineRegion)"
+            }
+         },
+         "required": [ "type", "output" ]
+      },
+      "ToolCallStep": {
+         "type": "object",
+         "additionalProperties": false,
+         "properties": {
+            "type": { "const": "tool-call" },
+            "recipient": {
+               "type": "string",
+               "pattern": "^[a-zA-Z0-9_\\-]+\\.[a-zA-Z0-9_\\-]+$"
+            },
+            "channel": { "const": "commentary" },
+            "args": {
+               "type": "object",
+               "additionalProperties": true
+            },
+            "save_as": { "type": "string" }
+         },
+         "required": [ "type", "recipient", "channel", "args", "save_as" ]
+      },
+      "IfStep": {
+         "type": "object",
+         "additionalProperties": false,
+         "properties": {
+            "type": { "const": "if" },
+            "condition": { "type": "string" },
+            "then": {
+               "type": "array",
+               "items": { "$ref": "#/$defs/Step" }
+            },
+            "else": {
+               "type": "array",
+               "items": { "$ref": "#/$defs/Step" }
+            }
+         },
+         "required": [ "type", "condition", "then", "else" ]
+      },
+      "AssistantMessageStep": {
+         "type": "object",
+         "additionalProperties": false,
+         "properties": {
+            "type": { "const": "assistant-message" },
+            "channel": { "$ref": "#/$defs/Channel" },
+            "content": { "type": "string" },
+            "content_template": { "type": "string" }
+         },
+         "required": [ "type", "channel" ]
+      },
+      "HaltStep": {
+         "type": "object",
+         "additionalProperties": false,
+         "properties": { "type": { "const": "halt" } },
+         "required": [ "type" ]
+      }
+   }
+}
+
+

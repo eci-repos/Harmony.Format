@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "BasicEnvelopeSample": {
+      "commandName": "Project",
+      "commandLineArgs": "\"HarmonyTextSimpleSample.hrf\" \"HarmonyTextFullSample.hrf\""
+    }
+  }
+}

@@ -12,4 +12,19 @@
     <ProjectReference Include="..\..\src\Harmony.Format.SemanticKernel\Harmony.Format.SemanticKernel.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="Schemas\harmony_envelope_schema.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Schemas\menu_summary_schema.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\HarmonyTextFullSample.hrf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\HarmonyTextSimpleSample.hrf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

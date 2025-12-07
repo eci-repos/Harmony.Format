@@ -48,6 +48,42 @@ public class HarmonyParser
       HarmonyTokens.End, HarmonyTokens.Call, HarmonyTokens.Return
    };
 
+   private static bool IsTerminator(string token) =>
+      token == HarmonyTokens.End ||
+      token == HarmonyTokens.Call ||
+      token == HarmonyTokens.Return;
+
+   private static bool IsAssistantRole(string role) =>
+      role.Equals(HarmonyConstants.RoleAssistant, StringComparison.OrdinalIgnoreCase);
+
+   /// <summary>
+   /// Channel resolution:
+   /// - Channel is only meaningful for Assistant frames.
+   /// - If channel is omitted for Assistant, default to Final (safest user-facing fallback),
+   ///   unless the caller indicates the content is tool-related, then Commentary.
+   /// - For non-Assistant roles, treat as Unspecified (channel not applicable).
+   /// </summary>
+   /// <param name="role">Parsed role.</param>
+   /// <param name="parsedChannel">Channel parsed from the HRF header, or Unspecified if absent.
+   /// </param>
+   /// <param name="looksLikeToolCall">
+   /// True if the frame body looks like a tool/function call envelope (your heuristics).
+   /// </param>
+   public static HarmonyChannel? ResolveChannel(
+      string role, HarmonyChannel? parsedChannel, bool looksLikeToolCall = false)
+   {
+      // If the sender isn't the assistant, channel is not applicable in practice.
+      if (!IsAssistantRole(role))
+         return parsedChannel;
+
+      // If channel is provided, trust it (but you could validate against allowed set).
+      if (parsedChannel is not null)
+         return parsedChannel;
+
+      // Channel omitted: choose a safe default.
+      return looksLikeToolCall ? HarmonyChannel.Commentary : HarmonyChannel.Final;
+   }
+
    /// <summary>
    /// Parses a conversation from the specified text input, extracting messages and their 
    /// associated metadata.
@@ -87,15 +123,14 @@ public class HarmonyParser
       {
          pos = startIdx + HarmonyTokens.Start.Length;
 
-         // Parse header: role,
-         // then optional <|channel|> + optional to=…, optional <|constrain|> contentType
+         // Parse header: role, then (syntactically) optional <|channel|> + optional to=…,
+         // optional <|constrain|> contentType
          var (role, channel, recipient, contentType, nextPosAfterHeader) =
              ParseHeader(text, pos);
 
          // Validate channel presence (previous implementation assumed channel.Value)
-         if (channel is null)
-            throw new FormatException(
-               $"Missing channel in header for role '{role}' at position {startIdx}.");
+         // if role is "assistant" then channel is required - default to "final" if missing
+         HarmonyChannel? resolvedChannel = ResolveChannel(role, channel);
 
          // Next must be <|message|>
          if (!TryFind(text, HarmonyTokens.Message, nextPosAfterHeader, out int msgIdx))
@@ -115,7 +150,7 @@ public class HarmonyParser
          var message = new HarmonyMessage
          {
             Role = role,
-            Channel = channel.Value,
+            Channel = resolvedChannel.Value,
             Recipient = recipient,
             ContentType = contentType,
             Content = contentElement,
@@ -165,7 +200,7 @@ public class HarmonyParser
          throw new FormatException("Missing role in header");
       string role = roleRaw.Trim();
 
-      HarmonyChannel? channel = null;
+      HarmonyChannel? channel = HarmonyChannel.Unspecified;
       string? recipient = null;
       string? contentType = null;
 
@@ -223,38 +258,73 @@ public class HarmonyParser
    /// </returns>
    /// <exception cref="FormatException">Thrown if the channel specified in the header text is
    /// unrecognized.</exception>
-   private static (HarmonyChannel?, string?) ParseChannelAndRecipient(string headerText)
+   private static (HarmonyChannel? channel, string? recipient) ParseChannelAndRecipient(string headerText)
    {
-      // Example headerText: "commentary to=functions.getweather"
-      // Or: "analysis" | "final"
-      var text = headerText.Trim();
-      if (string.IsNullOrEmpty(text)) return (null, null);
+      // Accept headerText like:
+      //   "<|channel|>commentary to=functions.getweather"
+      //   "<|channel|>\ncommentary\nto=functions.getweather"
+      //   "commentary to=functions.getweather"
+      //   "analysis" | "final"
+      var text = (headerText ?? string.Empty).Trim();
+      if (text.Length == 0) return (null, null);
 
-      // Split by whitespace, look for "to=…"
-      string? chan = null;
+      // Normalize whitespace (incl. newlines/tabs)
+      var parts = Regex.Split(text, @"\s+");
+
+      string? chanToken = null;
       string? recipient = null;
 
-      var parts = Regex.Split(text, @"\s+");
-      foreach (var part in parts)
+      for (int i = 0; i < parts.Length; i++)
       {
+         var part = parts[i];
+
+         // If the channel sentinel appears as its own token, take the next token as channel.
+         if (string.Equals(part, HarmonyTokens.Channel, StringComparison.Ordinal))
+         {
+            if (i + 1 < parts.Length)
+            {
+               chanToken = parts[i + 1];
+               i++; // skip next; we consumed it as channel value
+            }
+            continue;
+         }
+
+         // If the sentinel is stuck to the value (e.g. "<|channel|>commentary"), strip it.
+         if (part.StartsWith(HarmonyTokens.Channel, StringComparison.Ordinal) ||
+             part.StartsWith("<|channel|>", StringComparison.Ordinal))
+         {
+            var stripped = part
+                .Replace(HarmonyTokens.Channel, "", StringComparison.Ordinal)
+                .Replace("<|channel|>", "", StringComparison.Ordinal)
+                .Trim();
+
+            if (!string.IsNullOrEmpty(stripped))
+               chanToken = stripped;
+
+            continue;
+         }
+
          if (part.StartsWith("to=", StringComparison.OrdinalIgnoreCase))
          {
             recipient = part.Substring("to=".Length).Trim();
+            continue;
          }
-         else if (chan is null)
-         {
-            chan = part.Trim();
-         }
+
+         // If we still don't have a channel token, the first non-"to=" token is the channel.
+         if (chanToken is null)
+            chanToken = part.Trim();
       }
 
-      HarmonyChannel? channel = chan?.ToLowerInvariant() switch
+      // Best practice: be tolerant—unknown => Unspecified (don’t explode on new channels)
+      HarmonyChannel? channel = (chanToken ?? string.Empty).Trim().ToLowerInvariant() switch
       {
          HarmonyConstants.ChannelAnalysis => HarmonyChannel.Analysis,
          HarmonyConstants.ChannelCommentary => HarmonyChannel.Commentary,
          HarmonyConstants.ChannelFinal => HarmonyChannel.Final,
-         null => null,
-         _ => throw new FormatException($"Unknown channel '{chan}'")
+         "" => null,
+         _ => null
       };
+
       return (channel, recipient);
    }
 

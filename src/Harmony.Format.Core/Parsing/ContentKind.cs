@@ -7,12 +7,18 @@ using System.Threading.Tasks;
 // -------------------------------------------------------------------------------------------------
 namespace Harmony.Format.Core;
 
-public enum HarmonyChannel
+public enum ContentKind
 {
-   Analysis, 
-   Commentary, 
-   Final,
-
-   // Parser-only state: channel not present in the frame
-   Unspecified
+   Empty,
+   Json,
+   Xml,
+   Markdown,
+   Html,
+   Yaml,
+   CsvTsv,
+   UrlEncodedForm,
+   Base64,
+   PlainText,
+   Unknown
 }
+
