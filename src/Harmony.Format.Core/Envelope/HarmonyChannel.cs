@@ -9,10 +9,7 @@ namespace Harmony.Format.Core;
 
 public enum HarmonyChannel
 {
-   Analysis, 
-   Commentary, 
-   Final,
-
-   // Parser-only state: channel not present in the frame
-   Unspecified
+   analysis, 
+   commentary, 
+   final
 }

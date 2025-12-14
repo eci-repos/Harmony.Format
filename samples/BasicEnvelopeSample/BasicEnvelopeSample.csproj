@@ -19,10 +19,13 @@
     <None Update="Schemas\menu_summary_schema.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Scripts\HarmonyTextFullSample.hrf">
+    <None Update="Scripts\010 - HarmonyJsonSimpleSample.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="Scripts\002 - HarmonyTextFullSample.hrf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Scripts\HarmonyTextSimpleSample.hrf">
+    <None Update="Scripts\001 - HarmonyTextSimpleSample.hrf">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

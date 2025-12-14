@@ -9,5 +9,5 @@ namespace Harmony.Format.Core;
 
 public sealed class HarmonyConversation
 {
-   public List<HarmonyMessage> Messages { get; set; } = new();
+   public List<HarmonyMessage> messages { get; set; } = new();
 }

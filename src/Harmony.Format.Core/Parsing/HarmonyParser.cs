@@ -48,6 +48,8 @@ public class HarmonyParser
       HarmonyTokens.End, HarmonyTokens.Call, HarmonyTokens.Return
    };
 
+   #region -- 4.00 - Is a...; Content Looks Like 
+
    private static bool IsTerminator(string token) =>
       token == HarmonyTokens.End ||
       token == HarmonyTokens.Call ||
@@ -55,6 +57,25 @@ public class HarmonyParser
 
    private static bool IsAssistantRole(string role) =>
       role.Equals(HarmonyConstants.RoleAssistant, StringComparison.OrdinalIgnoreCase);
+
+   private static bool LooksLikeJsonObject(string s)
+   {
+      // Trim outer CRLFs first
+      s = s.Trim('\r', '\n', ' ', '\t');
+      return s.StartsWith("{", StringComparison.Ordinal);
+   }
+
+   private static bool LooksLikeHarmonyScript(string s)
+   {
+      // Heuristic: JSON object containing a "steps" array or typical script keys
+      s = s.Trim('\r', '\n', ' ', '\t');
+      if (!s.StartsWith("{", StringComparison.Ordinal)) return false;
+      return s.Contains("\"steps\"", StringComparison.Ordinal) ||
+             s.Contains("\"type\": \"tool-call\"", StringComparison.Ordinal) ||
+             s.Contains("\"type\": \"if\"", StringComparison.Ordinal);
+   }
+
+   #endregion
 
    /// <summary>
    /// Channel resolution:
@@ -81,7 +102,7 @@ public class HarmonyParser
          return parsedChannel;
 
       // Channel omitted: choose a safe default.
-      return looksLikeToolCall ? HarmonyChannel.Commentary : HarmonyChannel.Final;
+      return looksLikeToolCall ? HarmonyChannel.commentary : HarmonyChannel.final;
    }
 
    /// <summary>
@@ -143,27 +164,86 @@ public class HarmonyParser
          if (termToken is null)
             throw new FormatException("Missing terminator token (<|end|>|<|call|>|<|return|>)");
 
-         // Preserve JSON or text according to contentType
-         var contentElement = ParseContentElement(contentRaw, contentType);
+         // Remove outer CRLFs only (do not touch inner whitespace)
+         contentRaw = contentRaw.Trim('\r', '\n');
+
+         // Decide default contentType when <|constrain|> is absent
+         string effectiveContentType;
+
+         if (!string.IsNullOrWhiteSpace(contentType))
+         {
+            // Honor explicit <|constrain|> value
+            effectiveContentType = contentType;
+         }
+         else
+         {
+            // No explicit constrain: infer from role/channel/termination
+            if (IsAssistantRole(role))
+            {
+               if (resolvedChannel == HarmonyChannel.commentary)
+               {
+                  // Commentary + call/return => JSON
+                  if (termToken == HarmonyTokens.Call || termToken == HarmonyTokens.Return)
+                  {
+                     effectiveContentType = HarmonyConstants.ContentTypeJson; // "json"
+                  }
+                  else
+                  {
+                     // No semantic termination (end): pick based on body heuristics
+                     // If you have a detector, use it; otherwise conservative default:
+                     // e.g., if looksLikeToolCall => "json";
+                     //       if looksLikePlan => "harmony-script"; else "text"
+                     bool looksLikePlan = LooksLikeHarmonyScript(contentRaw);
+                     bool looksLikeArgs = LooksLikeJsonObject(contentRaw);
+
+                     effectiveContentType = looksLikePlan
+                         ? HarmonyConstants.ContentTypeScript        // "harmony-script"
+                         : looksLikeArgs
+                             ? HarmonyConstants.ContentTypeJson      // "json"
+                             : HarmonyConstants.ContentTypeText;     // "text"
+                  }
+               }
+               else
+               {
+                  // assistant + analysis/final => text
+                  effectiveContentType = HarmonyConstants.ContentTypeText; // "text"
+               }
+            }
+            else
+            {
+               // user/system => text
+               effectiveContentType = HarmonyConstants.ContentTypeText; // "text"
+            }
+         }
+
+         // Now use effectiveContentType everywhere
+         var contentElement = ParseContentElement(contentRaw, effectiveContentType);
 
          // Create message
          var message = new HarmonyMessage
          {
             Role = role,
-            Channel = resolvedChannel.Value,
+            Channel = (resolvedChannel.HasValue ? resolvedChannel.Value : null),
             Recipient = recipient,
-            ContentType = contentType,
+            ContentType = effectiveContentType,
             Content = contentElement,
-            Termination = termToken switch
+
+            // Map termination only for CALL/RETURN; <|end|> is just a delimiter,
+            // not semantic termination.  Only allow Termination
+            // when resolvedChannel == HarmonyChannel.commentary (tool calls)
+            Termination = (IsAssistantRole(role) && 
+               resolvedChannel == HarmonyChannel.commentary)
+            ?  termToken switch
             {
-               var t when t == HarmonyTokens.End => HarmonyTermination.End,
-               var t when t == HarmonyTokens.Call => HarmonyTermination.Call,
-               var t when t == HarmonyTokens.Return => HarmonyTermination.Return,
-               _ => null
+               var t when t == HarmonyTokens.Call => HarmonyTermination.call,
+               var t when t == HarmonyTokens.Return => HarmonyTermination.@return,
+               var t when t == HarmonyTokens.End => HarmonyTermination.end,
+               _ => (HarmonyTermination?)null
             }
+            : (HarmonyTermination?)null
          };
 
-         convo.Messages.Add(message);
+         convo.messages.Add(message);
          pos = nextPosAfterContent; // continue
       }
 
@@ -200,7 +280,7 @@ public class HarmonyParser
          throw new FormatException("Missing role in header");
       string role = roleRaw.Trim();
 
-      HarmonyChannel? channel = HarmonyChannel.Unspecified;
+      HarmonyChannel? channel = null;
       string? recipient = null;
       string? contentType = null;
 
@@ -223,6 +303,9 @@ public class HarmonyParser
       // the content type (e.g., "json")
       if (nextToken == HarmonyTokens.Constrain)
       {
+         // Move past the sentinel before reading
+         p += HarmonyTokens.Constrain.Length;
+
          var (ctype, next3, p3) = ReadUntilAny(text, p, new[] { HarmonyTokens.Message });
          contentType = ctype.Trim();
          p = p3;
@@ -318,9 +401,9 @@ public class HarmonyParser
       // Best practice: be tolerant—unknown => Unspecified (don’t explode on new channels)
       HarmonyChannel? channel = (chanToken ?? string.Empty).Trim().ToLowerInvariant() switch
       {
-         HarmonyConstants.ChannelAnalysis => HarmonyChannel.Analysis,
-         HarmonyConstants.ChannelCommentary => HarmonyChannel.Commentary,
-         HarmonyConstants.ChannelFinal => HarmonyChannel.Final,
+         HarmonyConstants.ChannelAnalysis => HarmonyChannel.analysis,
+         HarmonyConstants.ChannelCommentary => HarmonyChannel.commentary,
+         HarmonyConstants.ChannelFinal => HarmonyChannel.final,
          "" => null,
          _ => null
       };

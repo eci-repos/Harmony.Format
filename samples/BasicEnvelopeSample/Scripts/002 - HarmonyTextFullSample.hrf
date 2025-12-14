@@ -1,0 +1,74 @@
+﻿
+<|start|>
+system
+<|channel|>
+analysis
+<|message|>
+You are M365 Copilot. Follow HRF.
+<|end|>
+
+<|start|>
+user
+<|channel|>
+analysis
+<|message|>
+Find two nearby coffee shops and summarize them.
+<|end|>
+
+<|start|>
+assistant
+<|channel|>
+commentary to=orchestrator.plan
+<|constrain|>
+harmony-script
+<|message|>
+{
+  "steps": [
+    {
+      "type": "extract-input",
+      "output": {
+        "userQuery": "$input.text"
+      }
+    },
+    {
+      "type": "tool-call",
+      "recipient": "maps.search",
+      "channel": "commentary",
+      "args": {
+        "query": "$vars.userQuery",
+        "limit": 2
+      },
+      "save_as": "places"
+    },
+    {
+      "type": "if",
+      "condition": "$vars.places.length > 0",
+      "then": [
+        {
+          "type": "assistant-message",
+          "channel": "analysis",
+          "content_template": "Found {{places.length}} options."
+        }
+      ],
+      "else": [
+        {
+          "type": "assistant-message",
+          "channel": "analysis",
+          "content_template": "No options found."
+        },
+        {
+          "type": "halt"
+        }
+      ]
+    }
+  ]
+}
+<|end|>
+
+<|start|>
+assistant
+<|channel|>
+final
+<|message|>
+Here are two nearby coffee shops with brief summaries:\n\n1) Shop A — cozy atmosphere.\n2) Shop B — fast Wi‑Fi.\n\nWant directions?
+<|end|>

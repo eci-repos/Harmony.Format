@@ -12,6 +12,44 @@ using Json.Schema;
 namespace Harmony.Format.Core;
 
 /// <summary>
+/// Schema validation error details for Harmony envelopes and scripts.
+/// </summary>
+public class SchemaValidatorResultsErrorHelper
+{
+
+   public static List<string> GetErrors(EvaluationResults results)
+   {
+      var errors = new List<string>();
+      CollectErrors(results, errors);
+      return errors;
+   }
+
+   private static void CollectErrors(EvaluationResults results, List<string> errors)
+   {
+      if (results == null) return;
+
+      // If this node has errors, add them
+      if (results.Errors != null)
+      {
+         foreach (var error in results.Errors)
+         {
+            errors.Add($"{results.InstanceLocation}: {error}");
+         }
+      }
+
+      // Recursively check nested results
+      if (results.Details != null)
+      {
+         foreach (var detail in results.Details)
+         {
+            CollectErrors(detail, errors);
+         }
+      }
+   }
+
+}
+
+/// <summary>
 /// Validates Harmony envelopes & embedded harmony-script objects against 
 /// Draft 2020-12 JSON Schemas.
 /// </summary>
@@ -43,20 +81,16 @@ public static class HarmonySchemaValidator
       // Load the full envelope schema
       _envelopeSchema = JsonSchema.FromText(schemaText);
 
-      // Extract the HarmonyScript sub-schema from $defs.HarmonyScript, if present.
-      using var doc = JsonDocument.Parse(schemaText);
-      if (doc.RootElement.TryGetProperty("$defs", out var defs) &&
-          defs.TryGetProperty("HarmonyScript", out var scriptDef))
-      {
-         _scriptSchema = JsonSchema.FromText(scriptDef.GetRawText());
-      }
-      else
-      {
-         // We treat absence of the sub-schema as a configuration error.
-         throw new InvalidOperationException(
-            "HarmonyScript sub-schema not found in harmony_envelope_schema.json " +
-            "at $defs.HarmonyScript.");
-      }
+      // Register the envelope in the *global* registry
+      // so $ref targets like <envelope-id>#/$defs/Step resolve correctly.
+      SchemaRegistry.Global.Register(_envelopeSchema);
+
+      // Build a tiny schema that $ref's the HarmonyScript subschema by absolute URI.
+      // This keeps internal refs (#/$defs/Step, etc.) resolvable via the envelope.
+      var envelopeId = _envelopeSchema.BaseUri ??
+         new Uri("https://example.org/harmony-envelope.schema.json");
+      var scriptRefJson = $@"{{ ""$ref"": ""{envelopeId}#/$defs/HarmonyScript"" }}";
+      _scriptSchema = JsonSchema.FromText(scriptRefJson);
    }
 
    /// <summary>
@@ -76,11 +110,13 @@ public static class HarmonySchemaValidator
       using var doc = JsonDocument.Parse(json);
       var result = _envelopeSchema.Evaluate(doc.RootElement, new EvaluationOptions
       {
-         OutputFormat = OutputFormat.Hierarchical
+         OutputFormat = OutputFormat.Hierarchical, 
       });
 
       if (!result.IsValid)
       {
+         var details = SchemaValidatorResultsErrorHelper.GetErrors(result);
+
          return new HarmonyError
          {
             Code = "HRF_SCHEMA_ENVELOPE_FAILED",
@@ -110,10 +146,13 @@ public static class HarmonySchemaValidator
          throw new InvalidOperationException(
             "HarmonySchemaValidator not initialized. HarmonyScript sub-schema is not available.");
 
-      var result = _scriptSchema.Evaluate(scriptElement, new EvaluationOptions
-      {
-         OutputFormat = OutputFormat.Hierarchical
-      });
+      var result = _scriptSchema.Evaluate(
+          scriptElement,
+          new EvaluationOptions
+          {
+             OutputFormat = OutputFormat.Hierarchical,
+             // No local registry needed; evaluation will fall back to SchemaRegistry.Global
+          });
 
       if (!result.IsValid)
       {

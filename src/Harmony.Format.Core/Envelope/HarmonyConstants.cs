@@ -10,6 +10,7 @@ namespace Harmony.Format.Core;
 internal static class HarmonyConstants
 {
    public const string ContentTypeJson = "json";
+   public const string ContentTypeText = "text";
    public const string ChannelCommentary = "commentary";
    public const string ChannelAnalysis = "analysis";
    public const string RoleAssistant = "assistant";

@@ -20,7 +20,10 @@ namespace Harmony.Format.Core;
 /// access if used concurrently.</remarks>
 public sealed class HarmonyEnvelope
 {
-   public string HRFVersion { get; set; } = "1.0";
+   [JsonPropertyName("hrfVersion")]
+   public string HRFVersion { get; set; } = "1.0.0";
+
+   [JsonPropertyName("messages")]
    public List<HarmonyMessage> Messages { get; set; } = new();
 
    /// <summary>
@@ -71,30 +74,45 @@ public sealed class HarmonyEnvelope
    /// found in the collection, or if deserialization of the harmony-script fails.</exception>
    public static HarmonyScript? GetScript(List<HarmonyMessage> messages)
    {
-      foreach (var msg in messages)
-      {
-         if (msg.Role == "system"
-             && string.Equals(msg.ContentType, "harmony-script", StringComparison.OrdinalIgnoreCase)
-             && msg.Content.ValueKind == JsonValueKind.Object)
-         {
-            // validate the script element
-            HarmonySchemaValidator.TryValidateScript(msg.Content);
+      // Preferred runtime location: assistant + commentary
+      var candidates = messages.Where(m =>
+          string.Equals(m.ContentType, "harmony-script", StringComparison.OrdinalIgnoreCase) &&
+          m.Content.ValueKind == JsonValueKind.Object &&
+          (
+              // Primary: assistant tool orchestration/prelude
+              (string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
+               string.Equals(m.Channel?.ToString(), "commentary", StringComparison.OrdinalIgnoreCase))
+              ||
+              // Optional: allow system/developer-provided script templates
+              string.Equals(m.Role, "system", StringComparison.OrdinalIgnoreCase) ||
+              string.Equals(m.Role, "developer", StringComparison.OrdinalIgnoreCase)
+          )
+      );
 
-            // Existing deserialization
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            options.Converters.Add(new JsonStringEnumConverter());
-            HarmonyScript script;
-            try
-            {
-               script = msg.Content.Deserialize<HarmonyScript>(options);
-            }
-            catch (JsonException ex)
-            {
-               throw new InvalidOperationException("Failed to deserialize harmony-script.", ex);
-            }
-            return script;
+      foreach (var msg in candidates)
+      {
+         // Validate the script element (anchored $ref resolution as discussed previously)
+         var scriptValidationError = HarmonySchemaValidator.TryValidateScript(msg.Content);
+         if (scriptValidationError != null)
+         {
+            // If you prefer, continue scanning other candidates instead of throwing.
+            throw new InvalidOperationException(
+                $"harmony-script validation failed: {scriptValidationError.Message}");
+         }
+
+         // Deserialize after validation
+         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+         options.Converters.Add(new JsonStringEnumConverter());
+         try
+         {
+            return msg.Content.Deserialize<HarmonyScript>(options);
+         }
+         catch (JsonException ex)
+         {
+            throw new InvalidOperationException("Failed to deserialize harmony-script.", ex);
          }
       }
+
       throw new InvalidOperationException("No harmony-script found in messages.");
    }
 
@@ -109,7 +127,7 @@ public sealed class HarmonyEnvelope
       return GetScript(envelope.Messages);
    }
 
-   public IEnumerable<(HarmonyChannel Channel, string Content)> GetPlainSystemPrompts()
+   public IEnumerable<(HarmonyChannel? Channel, string Content)> GetPlainSystemPrompts()
    {
       foreach (var msg in Messages)
       {
@@ -123,7 +141,7 @@ public sealed class HarmonyEnvelope
       }
    }
 
-   public (HarmonyChannel Channel, string Content)? GetUserMessage()
+   public (HarmonyChannel? Channel, string Content)? GetUserMessage()
    {
       foreach (var msg in Messages)
       {
@@ -157,7 +175,8 @@ public sealed class HarmonyEnvelope
          // Serialize the current instance and run it through the schema validator
          var jsonOpts = new JsonSerializerOptions
          {
-            PropertyNameCaseInsensitive = true
+            PropertyNameCaseInsensitive = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
          };
          jsonOpts.Converters.Add(new JsonStringEnumConverter());
          var json = JsonSerializer.Serialize(this, jsonOpts);
@@ -170,7 +189,8 @@ public sealed class HarmonyEnvelope
          return new HarmonyError
          {
             Code = "HRF_SCHEMA_NOT_INITIALIZED",
-            Message = "HarmonySchemaValidator is not initialized. Call Initialize() before validation.",
+            Message = 
+               "HarmonySchemaValidator is not initialized. Call Initialize() before validation.",
             Details = ex.Message
          };
       }
@@ -197,6 +217,11 @@ public sealed class HarmonyEnvelope
       {
          errors.Add("Envelope must contain at least one message.");
       }
+
+      // track termination tokens...
+      var callCount = 0;
+      var returnCount = 0;
+      var endCount = 0;
 
       // Track termination markers to avoid inconsistent use
       var terminationMessages = new List<int>();
@@ -228,6 +253,18 @@ public sealed class HarmonyEnvelope
             }
             else
             {
+               // to track global termination semantics
+               switch (msg.Termination)
+               {
+                  case HarmonyTermination.call: callCount++; break;
+                  case HarmonyTermination.@return: returnCount++; break;
+                  case HarmonyTermination.end: endCount++; break;
+                  default:
+                     errors.Add($"Message[{i}]: Unknown termination='{msg.Termination}'. "
+                        + "Expected 'call', 'return', or 'end'.");
+                     break;
+               }
+
                terminationMessages.Add(i);
             }
          }
@@ -238,7 +275,7 @@ public sealed class HarmonyEnvelope
             var ct = msg.ContentType.Trim().ToLowerInvariant();
 
             // Restrict to a known set for HRF compliance: plain, json, harmony-script
-            if (ct != "json" && ct != "harmony-script")
+            if (ct != "text" && ct != "json" && ct != "harmony-script")
             {
                errors.Add(
                   $"Message[{i}]: Unsupported contentType='{msg.ContentType}'. " +
@@ -251,7 +288,8 @@ public sealed class HarmonyEnvelope
                if (msg.Content.ValueKind != JsonValueKind.Object)
                {
                   errors.Add(
-                     $"Message[{i}]: contentType='harmony-script' requires object-valued JSON content.");
+                     $"Message[{i}]: contentType='harmony-script' " +
+                     "requires object-valued JSON content.");
                }
                else
                {
@@ -303,12 +341,34 @@ public sealed class HarmonyEnvelope
       // We only enforce a soft constraint here to avoid over-constraining advanced use:
       if (terminationMessages.Count > 1)
       {
-         errors.Add(
-            "Multiple messages carry termination markers. " +
-            "HRF workflows typically expect at most one termination-bearing assistant message per envelope.");
+         bool issueFound = false;
+         if (callCount > 1)
+         {
+            errors.Add("Multiple 'call' terminations found. HRF expects at most one assistant "
+               + "'call' per envelope.");
+            issueFound = true;
+         }
+         if (returnCount > 1)
+         {
+            errors.Add("Multiple 'return' terminations found. HRF expects at most one assistant "
+               + "'return' per envelope.");
+            issueFound = true;
+         }
+         if (endCount > 1)
+         {
+            errors.Add("Multiple 'end' terminations found. HRF expects at most one assistant "
+               + "'end' per envelope.");
+            issueFound = true;
+         }
+
+         if (issueFound)
+            errors.Add(
+               "Multiple messages carry termination markers. " +
+               "HRF workflows typically expect at most one termination-bearing assistant message " +
+               "per envelope.");
       }
 
-      // ---------- 3. Result aggregation ----------
+      // ---------- Result aggregation ----------
       if (errors.Count == 0)
       {
          return null; // HRF-valid

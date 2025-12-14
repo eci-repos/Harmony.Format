@@ -2,7 +2,7 @@
   "profiles": {
     "BasicEnvelopeSample": {
       "commandName": "Project",
-      "commandLineArgs": "\"HarmonyTextSimpleSample.hrf\" \"HarmonyTextFullSample.hrf\""
+      "commandLineArgs": "\"002 - HarmonyTextFullSample.hrf\" \"010 - HarmonyJsonSimpleSample.json\""
     }
   }
 }

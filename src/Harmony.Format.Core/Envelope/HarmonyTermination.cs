@@ -9,5 +9,5 @@ namespace Harmony.Format.Core;
 
 public enum HarmonyTermination
 {
-   End, Call, Return
+   end, call, @return
 }

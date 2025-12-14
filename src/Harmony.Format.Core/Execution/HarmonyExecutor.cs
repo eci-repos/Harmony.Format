@@ -133,11 +133,11 @@ public sealed class HarmonyExecutor
                {
                   switch (msg.Termination)
                   {
-                     case HarmonyTermination.End:
+                     case HarmonyTermination.end:
                         return Finalize(execCtx, "Execution ended by termination marker.");
-                     case HarmonyTermination.Return:
+                     case HarmonyTermination.@return:
                         return Finalize(execCtx, execCtx.FinalText);
-                     case HarmonyTermination.Call:
+                     case HarmonyTermination.call:
                         await HandleToolCallAsync(execCtx, msg, ct);
                         break;
                   }

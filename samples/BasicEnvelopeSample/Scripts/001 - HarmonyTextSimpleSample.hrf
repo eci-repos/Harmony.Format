@@ -1,11 +1,15 @@
 <|start|>
 system
+<|channel|>
+analysis
 <|message|>
 You are a helpful assistant.
 <|end|>
 
 <|start|>
 user
+<|channel|>
+final
 <|message|>
 Hello! Can you help me?
 <|end|>

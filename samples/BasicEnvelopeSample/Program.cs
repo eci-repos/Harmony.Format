@@ -1,4 +1,5 @@
 ﻿using Harmony.Format.Core;
+using static System.Net.Mime.MediaTypeNames;
 
 
 // -------------------------------------------------------------------------------------------------
@@ -32,31 +33,65 @@ public sealed class StubToolExecutionService : IToolExecutionService
    }
 }
 
-// -------------------------------------------------------------------------------------------------
-// Basic Envelope Sample App
-
-class Program
+public sealed class HarmonyHelper
 {
 
-   public static async Task ProcessScriptAsync(string? scriptFileName)
+   public static string GetFileExtension(string fileName)
    {
-      Console.WriteLine("=== Harmony.Format.Core — Basic Envelope Sample ===");
-
-      if (String.IsNullOrWhiteSpace(scriptFileName))
+      if (string.IsNullOrWhiteSpace(fileName))
       {
-         Console.WriteLine("Usage: dotnet run <path-to.hrf>");
-         return;
+         throw new ArgumentException("Filename cannot be null or empty.", nameof(fileName));
       }
 
+      // Path.GetExtension returns the extension including the leading dot (e.g., ".txt")
+      string extension = Path.GetExtension(fileName);
+
+      // If you prefer without the dot, trim it
+      return string.IsNullOrEmpty(extension) ? string.Empty : extension.TrimStart('.');
+   }
+
+   public static bool IsJsonFile(string fileName)
+   {
+      var extension = GetFileExtension(fileName);
+      return extension.ToLower() == "json";
+   }
+
+   public static string GetFileText(string scriptFileName)
+   {
       var path = "Scripts/" + scriptFileName;
       if (!File.Exists(path))
       {
-         Console.WriteLine($"File not found: {path}");
-         return;
+         throw new FileNotFoundException("File not found.", path);
+      }
+      return File.ReadAllText(path);
+   }
+
+   public static bool ValidateEnvelope(HarmonyEnvelope envelope)
+   {
+      // Schema Validator Initialization (if needed)
+      // Load schemas from the Core project’s Schemas folder
+      var schemaFolder = Path.Combine(AppContext.BaseDirectory, "Schemas");
+      if (Directory.Exists(schemaFolder))
+      {
+         Console.WriteLine("\n--- Initializing Schema Validator ---");
+         HarmonySchemaValidator.Initialize(schemaFolder);
       }
 
+      // Validate Envelope (schema + semantic rules)
+      Console.WriteLine("\n--- Validating Envelope ---");
+      var error = envelope.ValidateForHrf();
+      if (error != null)
+      {
+         Console.WriteLine($"ERROR: {error.Code} — {error.Message}");
+         return false;
+      }
+      Console.WriteLine("Envelope is valid!");
+      return true;
+   }
+
+   public static HarmonyEnvelope ConvertHrfTextToEnvelope(string hrfText)
+   {
       // Load HRF text
-      string hrfText = File.ReadAllText(path);
       Console.WriteLine("\n--- Loaded HRF Text ---");
       Console.WriteLine(hrfText);
 
@@ -70,26 +105,26 @@ class Program
       Console.WriteLine("\n--- Envelope Loaded ---");
       Console.WriteLine($"Messages: {envelope.Messages.Count}");
 
-      // 3. Schema Validator Initialization (if needed)
-      // Load schemas from the Core project’s Schemas folder
-      var schemaFolder = Path.Combine(AppContext.BaseDirectory, "Schemas");
-      if (Directory.Exists(schemaFolder))
-      {
-         Console.WriteLine("\n--- Initializing Schema Validator ---");
-         HarmonySchemaValidator.Initialize(schemaFolder);
-      }
+      return envelope;
+   }
 
-      // 4. Validate Envelope (schema + semantic rules)
-      Console.WriteLine("\n--- Validating Envelope ---");
-      var error = envelope.ValidateForHrf();
-      if (error != null)
-      {
-         Console.WriteLine($"ERROR: {error.Code} — {error.Message}");
-         return;
-      }
-      Console.WriteLine("Envelope is valid!");
+   public static HarmonyEnvelope ConvertJsonToEnvelope(string jsonText)
+   {
+      // Load JSON text
+      Console.WriteLine("\n--- Loaded JSON Text ---");
+      Console.WriteLine(jsonText);
 
-      // 5. Execute Envelope
+      // Convert JSON → Envelope object
+      var envelope = HarmonyConverter.ConvertEnvelopeJsonToEnvelope(jsonText);
+      Console.WriteLine("\n--- Envelope Loaded ---");
+      Console.WriteLine($"Messages: {envelope.Messages.Count}");
+
+      return envelope;
+   }
+
+   public static async Task ExecuteEnvelope(HarmonyEnvelope envelope)
+   {
+      // Execute Envelope
       Console.WriteLine("\n--- Executing Envelope ---");
 
       var chatService = new StubLanguageModelChatService();
@@ -97,7 +132,17 @@ class Program
       var executor = new HarmonyExecutor(chatService, toolService);
 
       var input = new Dictionary<string, object?>(); // provide runtime input here
-      var result = await executor.ExecuteAsync(envelope, input);
+
+      HarmonyExecutionResult result;
+      try
+      {
+         result = await executor.ExecuteAsync(envelope, input);
+      }
+      catch (Exception ex)
+      {
+         Console.WriteLine($"\n=== Execution Exception ===\n{ex}");
+         return;
+      }
 
       // 6. Show Results
       Console.WriteLine("\n=== Execution Result ===");
@@ -110,6 +155,49 @@ class Program
       {
          Console.WriteLine(result.FinalText);
       }
+   }
+
+}
+
+// -------------------------------------------------------------------------------------------------
+// Basic Envelope Sample App
+
+class Program
+{
+   public static async Task ProcessScriptAsync(string? scriptFileName)
+   {
+      Console.WriteLine("=== Harmony.Format.Core — Basic Envelope Sample ===");
+
+      if (String.IsNullOrWhiteSpace(scriptFileName))
+      {
+         Console.WriteLine("Usage: dotnet run <path-to.hrf|.json>");
+         return;
+      }
+
+      var isJson = HarmonyHelper.IsJsonFile(scriptFileName ?? "");
+
+      string text = HarmonyHelper.GetFileText(scriptFileName);
+
+      HarmonyEnvelope? envelope = null;
+      if (isJson)
+      {
+         // If JSON, convert to Envelope
+         envelope = HarmonyHelper.ConvertJsonToEnvelope(text);
+      }
+      else
+      {
+         // If HRF, convert to Envelope
+         envelope = HarmonyHelper.ConvertHrfTextToEnvelope(text);
+      }
+
+      // Validate Envelope
+      if (!HarmonyHelper.ValidateEnvelope(envelope))
+      {
+         return;
+      }
+
+      // Execute Envelope
+      await HarmonyHelper.ExecuteEnvelope(envelope);
    }
 
    static async Task Main(string[] args)
