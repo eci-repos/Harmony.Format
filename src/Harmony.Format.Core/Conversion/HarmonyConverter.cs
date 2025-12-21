@@ -45,7 +45,7 @@ public static class FormatToJsonConverter
       var envelope = new HarmonyEnvelope
       {
          HRFVersion = hrfVersion,
-         Messages = conversation.messages
+         Messages = conversation.Messages
       };
 
       var json = JsonSerializer.Serialize(envelope, JsonOpts);
@@ -137,7 +137,7 @@ public static class JsonToFormatConverter
       if (msg.Channel != null)
       {
          var channelName =
-            msg.Channel.ToString().ToLowerInvariant(); // analysis | commentary | final
+            msg.Channel?.ToString().ToLowerInvariant(); // analysis | commentary | final
          sb.AppendLine(HarmonyTokens.Channel);
          sb.Append(channelName);
 
@@ -273,7 +273,7 @@ public static class HarmonyConverter
       // 2) Produce a schema-valid root object: ONLY { "messages": [...] }
       var schemaValidEnvelope = new
       {
-         messages = convo.messages
+         messages = convo.Messages
       };
 
       // 3) Serialize
@@ -308,7 +308,7 @@ public static class HarmonyConverter
       return new HarmonyEnvelope
       {
          HRFVersion = string.IsNullOrWhiteSpace(hrfVersion) ? "1.0" : hrfVersion,
-         Messages = convo.messages
+         Messages = convo.Messages
       };
    }
 

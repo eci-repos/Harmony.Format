@@ -45,7 +45,7 @@ public static class HarmonyCanonicalizer
 
       var canon = new CanonicalConversation();
 
-      foreach (var m in convo.messages)
+      foreach (var m in convo.Messages)
       {
          // Normalize role & channel
          var role = NormalizeRole(m.Role);

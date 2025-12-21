@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/samples/">
-    <Project Path="samples/BasicEnvelopeSample/BasicEnvelopeSample.csproj" Id="87a7276c-2d85-438c-8a81-3f8ede0e5ef6" />
+    <Project Path="samples/HF_Envelope_Sample/HF_Envelope_Sample.csproj" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path="CONTRIBUTING.md" />

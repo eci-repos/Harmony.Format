@@ -243,7 +243,7 @@ public class HarmonyParser
             : (HarmonyTermination?)null
          };
 
-         convo.messages.Add(message);
+         convo.Messages.Add(message);
          pos = nextPosAfterContent; // continue
       }
 

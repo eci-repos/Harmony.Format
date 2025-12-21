@@ -124,7 +124,14 @@ public sealed class HarmonyEnvelope
    /// collection.</returns>
    public static HarmonyScript GetScript(HarmonyEnvelope envelope)
    {
-      return GetScript(envelope.Messages);
+      // Ensure that GetScript(List<HarmonyMessage>) never returns null here.
+      // If it does, throw to avoid CS8603.
+      var script = GetScript(envelope.Messages);
+      if (script is null)
+      {
+         throw new InvalidOperationException("No harmony-script found in envelope.");
+      }
+      return script;
    }
 
    public IEnumerable<(HarmonyChannel? Channel, string Content)> GetPlainSystemPrompts()
@@ -226,7 +233,7 @@ public sealed class HarmonyEnvelope
       // Track termination markers to avoid inconsistent use
       var terminationMessages = new List<int>();
 
-      for (int i = 0; i < Messages.Count; i++)
+      for (int i = 0; i < Messages?.Count; i++)
       {
          var msg = Messages[i];
 
@@ -319,7 +326,7 @@ public sealed class HarmonyEnvelope
          }
 
          // --- Assistant channel semantics ---
-         if (isAssistant)
+         if (isAssistant && msg.Channel != null)
          {
             // In HRF, assistant messages must specify a recognized channel
             if (!Enum.IsDefined(typeof(HarmonyChannel), msg.Channel))

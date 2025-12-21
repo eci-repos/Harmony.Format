@@ -87,10 +87,16 @@ public sealed class HarmonyExecutor
 
       // Extract 'harmony-script'
       var script = envelope.GetScript();
+      if (script == null)
+      {
+         return HarmonyExecutionResult.ErrorResult(
+            code: "MISSING_HARMONY_SCRIPT",
+            message: "Error: Harmony envelope does not contain a valid 'harmony-script' section.");
+      }
 
       // Initialize vars (from script.vars defaults)
       var vars = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-      if (script.Vars is not null)
+      if (script != null && script.Vars is not null)
       {
          foreach (var kvp in script.Vars)
          {
@@ -120,6 +126,12 @@ public sealed class HarmonyExecutor
       try
       {
          var processedMessageCount = 0;
+         if (script?.Steps is null || script.Steps.Count == 0)
+         {
+            return HarmonyExecutionResult.ErrorResult(
+               code: "NO_HARMONY_STEPS",
+               message: "Error: Harmony script contains no steps to execute.");
+         }
          foreach (var step in script.Steps)
          {
             var halted = await ExecuteStepAsync(execCtx, step, ct);
