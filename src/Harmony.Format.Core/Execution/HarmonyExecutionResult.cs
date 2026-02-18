@@ -1,6 +1,6 @@
 ﻿
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 public class HarmonyExecutionResult
 {

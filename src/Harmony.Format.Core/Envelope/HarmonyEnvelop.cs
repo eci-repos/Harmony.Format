@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 /// <summary>
 /// Represents a container for a collection of Harmony messages, providing methods to parse, access, 

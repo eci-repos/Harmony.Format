@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using Json.Schema;
 
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 /// <summary>
 /// Schema validation error details for Harmony envelopes and scripts.

@@ -7,7 +7,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 public sealed record ContentTypeResult(
     ContentKind Kind,

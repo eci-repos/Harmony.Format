@@ -7,7 +7,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 /// <summary>
 /// Represents a harmony-script payload containing variables and a sequence of steps for execution 

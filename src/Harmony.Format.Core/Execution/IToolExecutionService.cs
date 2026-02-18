@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 
 public interface IToolExecutionService

@@ -46,7 +46,7 @@ It’s particularly useful if you’re running or integrating gpt-oss models (wh
 
 | Project | Description |
 |--------|-------------|
-| **Harmony.Format.Core** | Core envelope model, parser, validators, execution engine, converters |
+| **Harmony.Format** | Core envelope model, parser, validators, execution engine, converters |
 | **Harmony.Format.SemanticKernel** | Semantic Kernel integration (`ChatCompletionService`, `ToolExecutionService`) |
 | **Harmony.Format.Cli** *(future)* | CLI utilities for converting, validating, and executing HRF scripts |
 | **Harmony.Format.Extensions** *(future)* | Experimental/advanced script features |
@@ -107,7 +107,7 @@ This allows you to plug in:
 # **Architecture**
 
 ```
-Harmony.Format.Core
+Harmony.Format
  │
  ├── Envelope Model (HarmonyEnvelope, HarmonyMessage)
  ├── HarmonyScript (steps, vars, converters)
@@ -131,7 +131,7 @@ Harmony.Format.SemanticKernel
 ### When published to NuGet (planned):
 
 ```sh
-dotnet add package Harmony.Format.Core
+dotnet add package Harmony.Format
 dotnet add package Harmony.Format.SemanticKernel
 ```
 

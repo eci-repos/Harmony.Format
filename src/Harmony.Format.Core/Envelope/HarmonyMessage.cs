@@ -2,7 +2,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 
 /// <summary>

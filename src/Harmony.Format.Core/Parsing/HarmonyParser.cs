@@ -2,7 +2,7 @@
 using System.Text.RegularExpressions;
 
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 /// <summary>
 /// Provides functionality to parse structured conversation data from tokenized text input.

@@ -6,7 +6,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 /// <summary>
 /// Executes Harmony workflows by orchestrating chat-based operations, tool invocations, and
@@ -64,15 +64,22 @@ public sealed class HarmonyExecutor
    /// <param name="input">A dictionary of input variables to be supplied to the script. Keys are 
    /// variable names; values are their
    /// corresponding values. May be empty if no inputs are required.</param>
+   /// <param name="chatHistoryOverride">An optional chat history to use instead of building one
+   /// from the envelope's messages.</param> 
+   /// <param name="toolRouterOverride">An optional override for the tool execution service. 
+   /// If provided, this instance will be used for all tool invocations during execution instead 
+   /// of the default service configured in the executor.</param>
    /// <param name="ct">A cancellation token that can be used to cancel the execution operation.
    /// </param>
    /// <returns>A task that represents the asynchronous operation. The task result contains a 
    /// HarmonyExecutionResult with the
    /// final output text and any updated variables from the script execution.</returns>
    public async Task<HarmonyExecutionResult> ExecuteAsync(
-       HarmonyEnvelope envelope,
-       IDictionary<string, object?> input,
-       CancellationToken ct = default)
+      HarmonyEnvelope envelope,
+      IDictionary<string, object?> input,
+      ChatConversation? chatHistoryOverride,
+      IToolExecutionService? toolRouterOverride = null,
+      CancellationToken ct = default)
    {
       // Full HRF validation (shema + semantics) before execution
       var hrfError = envelope.ValidateForHrf();
@@ -104,23 +111,12 @@ public sealed class HarmonyExecutor
          }
       }
 
-      // Build initial chat history from plain system/user messages
-      var chatHistory = new ChatConversation();
-      foreach (var (channel, content) in envelope.GetPlainSystemPrompts())
-      {
-         if (!string.IsNullOrWhiteSpace(content))
-            chatHistory.AddSystemMessage(content);
-      }
-
-      var user = envelope.GetUserMessage();
-      if (user is { } u && !string.IsNullOrWhiteSpace(u.Content))
-      {
-         chatHistory.AddUserMessage(u.Content);
-      }
+      // Use caller-provided chat history if supplied; otherwise build it
+      ChatConversation chatHistory = chatHistoryOverride ?? BuildInitialChatHistory(envelope);
 
       // Prepare execution context
       var execCtx = new ExecutorContext(
-         _chatService, _toolRouter, chatHistory, vars, input, _jsonOpts);
+         _chatService, toolRouterOverride ?? _toolRouter, chatHistory, vars, input, _jsonOpts);
 
       // Execute steps sequentially
       try
@@ -184,6 +180,31 @@ public sealed class HarmonyExecutor
       }
 
       return Finalize(execCtx, execCtx.FinalText);
+   }
+
+   /// <summary>
+   /// Helper to builds the old-style initial prompt history (preserves behavior)
+   /// </summary>
+   /// <param name="envelope"></param>
+   /// <returns></returns>
+   // ----------------------------------------------------------------------------------------------
+   private static ChatConversation BuildInitialChatHistory(HarmonyEnvelope envelope)
+   {
+      var chatHistory = new ChatConversation();
+
+      foreach (var (channel, content) in envelope.GetPlainSystemPrompts())
+      {
+         if (!string.IsNullOrWhiteSpace(content))
+            chatHistory.AddSystemMessage(content);
+      }
+
+      var user = envelope.GetUserMessage();
+      if (user is { } u && !string.IsNullOrWhiteSpace(u.Content))
+      {
+         chatHistory.AddUserMessage(u.Content);
+      }
+
+      return chatHistory;
    }
 
    /// <summary>

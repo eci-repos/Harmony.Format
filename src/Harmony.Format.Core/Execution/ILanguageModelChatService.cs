@@ -1,15 +1,17 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
-// -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 public interface ILanguageModelChatService
 {
    Task<string> GetAssistantReplyAsync(
-       ChatConversation history,
-       CancellationToken ct = default);
+      ChatConversation history,
+      CancellationToken ct = default);
+
+   Task<string> GetAssistantReplyAsync(
+      ChatConversation history,
+      Func<ChatMessage, bool> modelFilter,
+      CancellationToken ct = default);
 }

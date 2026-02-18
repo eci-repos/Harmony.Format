@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Encodings.Web;
 
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Core;
+namespace Harmony.Format;
 
 // TODO: Consider making this an instance with configuration options if needed.
 //       Under current design and consideration...
