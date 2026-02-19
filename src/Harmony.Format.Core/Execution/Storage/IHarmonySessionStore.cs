@@ -45,4 +45,5 @@ public interface IHarmonySessionStore
    Task<bool> ExistsAsync(
       string sessionId,
       CancellationToken ct = default);
+
 }

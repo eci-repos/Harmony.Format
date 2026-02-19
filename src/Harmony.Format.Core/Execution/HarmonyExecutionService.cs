@@ -1,7 +1,10 @@
-﻿using Harmony.Format.Execution.Concurrency;
+﻿using Harmony.Format.Execution.Api;
+using Harmony.Format.Execution.Concurrency;
 using Harmony.Format.Execution.History;
 using Harmony.Format.Execution.Session;
 using Harmony.Format.Execution.Storage;
+using Harmony.Format.Execution.Tooling;
+using Harmony.Format.Execution.Transcript;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -28,19 +31,28 @@ public sealed partial class HarmonyExecutionService
    private readonly HarmonyExecutor _executor;
    private readonly IToolExecutionService _toolRouter;
    private readonly IHarmonySessionLockProvider _locks;
+   private readonly IHarmonySessionIndexStore _sessionIndexStore;
+   private readonly IHarmonyToolAvailability _toolAvailability; 
+   private readonly HarmonyPreflightAnalyzer _preflight;
 
    public HarmonyExecutionService(
       IHarmonyScriptStore scriptStore,
       IHarmonySessionStore sessionStore,
       HarmonyExecutor executor,
       IToolExecutionService toolRouter,
-      IHarmonySessionLockProvider locks)
+      IHarmonySessionLockProvider locks,
+      IHarmonySessionIndexStore sessionIndex,
+      IHarmonyToolAvailability? toolAvailability = null)
    {
       _scriptStore = scriptStore ?? throw new ArgumentNullException(nameof(scriptStore));
       _sessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
       _executor = executor ?? throw new ArgumentNullException(nameof(executor));
       _toolRouter = toolRouter ?? throw new ArgumentNullException(nameof(toolRouter));
       _locks = locks ?? throw new ArgumentNullException(nameof(locks));
+      _sessionIndexStore = sessionIndex ?? throw new ArgumentNullException(nameof(sessionIndex));
+
+      _toolAvailability = toolAvailability ?? new AllowAllToolAvailability();
+      _preflight = new HarmonyPreflightAnalyzer(_toolAvailability);
    }
 
    private async Task<HarmonySession> RequireSessionAsync(string sessionId, CancellationToken ct)
@@ -92,7 +104,7 @@ public sealed partial class HarmonyExecutionService
           or HarmonySessionStatus.Failed
           or HarmonySessionStatus.Cancelled)
       {
-         return new HarmonyMessageExecutionRecord
+         var record = new HarmonyMessageExecutionRecord
          {
             Index = session.CurrentIndex,
             ExecutionId = executionId,
@@ -100,6 +112,15 @@ public sealed partial class HarmonyExecutionService
             CompletedAt = DateTimeOffset.UtcNow,
             Logs = { $"Session is terminal ({session.Status}); no execution performed." }
          };
+
+         session.History.Add(record);
+         if (!string.IsNullOrWhiteSpace(executionId))
+            session.ExecutionIdIndex[executionId] = session.History.Count - 1;
+
+         session.UpdatedAt = DateTimeOffset.UtcNow;
+         await _sessionStore.SaveAsync(session, ct).ConfigureAwait(false);
+
+         return record;
       }
 
       // Load envelope once (and reuse)
@@ -320,9 +341,17 @@ public sealed partial class HarmonyExecutionService
    }
 }
 
-
+/// <summary>
+/// Provides services for executing messages within a Harmony session, managing state and history
+/// throughout the execution process.
+/// </summary>
+/// <remarks>This class is responsible for handling both context-only and executable messages,
+/// ensuring that the session's state is updated accordingly. It manages the persistence of 
+/// session and execution records after each operation, allowing for a robust execution flow 
+/// within Harmony sessions.</remarks>
 public sealed partial class HarmonyExecutionService
 {
+
    /// <summary>
    /// Executes the message at the specified index within a Harmony session, processing the message 
    /// and updating the session state accordingly.
@@ -433,6 +462,42 @@ public sealed partial class HarmonyExecutionService
          //    chat history rebuilt from transcript, then append assistant final.
          if (IsHarmonyScript(msg))
          {
+            var preflight = await _preflight.AnalyzeAsync(envelope, ct).ConfigureAwait(false); ;
+            if (!preflight.IsReady)
+            {
+               // 1) Compact transcript marker (optional but recommended)
+               AppendToTranscript(
+                  session,
+                  role: "system",
+                  content: HarmonyTranscriptWriter.PreflightBlockedSummary(preflight.MissingRecipients.Count),
+                  sourceIndex: index);
+
+               // 2) Structured artifact for MCP/UI
+               record.Outputs.Add(new HarmonyArtifact
+               {
+                  Name = "preflight",
+                  ContentType = "preflight",
+                  Content = JsonSerializer.SerializeToElement(preflight),
+                  Producer = "preflight"
+               });
+
+               // 3) Mark record + session
+               record.Status = HarmonyExecutionStatus.Blocked;
+               record.CompletedAt = DateTimeOffset.UtcNow;
+
+               session.Status = HarmonySessionStatus.Blocked;
+               session.CurrentIndex = Math.Max(session.CurrentIndex, index); // do NOT advance on blocked
+               session.UpdatedAt = DateTimeOffset.UtcNow;
+
+               // 4) Persist history + idempotency index
+               session.History.Add(record);
+               if (!string.IsNullOrWhiteSpace(record.ExecutionId))
+                  session.ExecutionIdIndex[record.ExecutionId] = session.History.Count - 1;
+
+               await _sessionStore.SaveAsync(session, ct).ConfigureAwait(false);
+               return record;
+            }
+
             record.Logs.Add("Executing harmony-script with session transcript as chat history.");
 
             // Build the prompt-ready chat history from the durable transcript
@@ -465,6 +530,18 @@ public sealed partial class HarmonyExecutionService
 
                   // Optional: keep the latest tool trace in session artifacts too
                   session.Artifacts["last_tool_trace"] = artifact;
+
+                  // compact transcript entry (keeps transcript readable)
+                  var duration = (trace.CompletedAt.HasValue)
+                     ? trace.CompletedAt.Value - trace.StartedAt
+                     : (TimeSpan?)null;
+
+                  AppendToTranscript(
+                     session,
+                     role: "assistant",
+                     content: HarmonyTranscriptWriter.ToolSummary(
+                        trace.Recipient, trace.Succeeded, duration),
+                     sourceIndex: index);
 
                   record.Logs.Add(
                      trace.Succeeded
@@ -612,8 +689,8 @@ public sealed partial class HarmonyExecutionService
 
       session.Transcript.Add(new HarmonyChatMessage
       {
-         Role = (role ?? "system").Trim().ToLowerInvariant(),
-         Content = content,
+         Role = HarmonyTranscriptWriter.NormalizeRole(role),
+         Content = content.Trim(),
          SourceIndex = sourceIndex,
          Timestamp = DateTimeOffset.UtcNow
       });

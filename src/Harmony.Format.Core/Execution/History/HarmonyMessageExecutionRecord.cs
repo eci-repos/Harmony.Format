@@ -42,11 +42,3 @@ public sealed class HarmonyMessageExecutionRecord
    public HarmonyError? Error { get; set; }
 }
 
-public enum HarmonyExecutionStatus
-{
-   Running = 0,
-   Succeeded = 1,
-   BlockedMissingTool = 2,
-   Skipped = 3,
-   Failed = 4
-}

@@ -58,13 +58,4 @@ public sealed class HarmonySession
       new(StringComparer.OrdinalIgnoreCase);
 }
 
-public enum HarmonySessionStatus
-{
-   Created = 0,
-   Running = 1,
-   Blocked = 2,
-   Completed = 3,
-   Failed = 4,
-   Cancelled = 5
-}
 
