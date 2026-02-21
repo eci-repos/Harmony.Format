@@ -1,0 +1,95 @@
+{
+  "hrfVersion": "1.0.0",
+  "messages": [
+    {
+      "role": "system",
+      "channel": "analysis",
+      "contentType": "text",
+      "content": "You are Harmony Copilot. Follow HRF strictly. Be concise, cite tools you used, and never invent tool output."
+    },
+    {
+      "role": "system",
+      "channel": "analysis",
+      "contentType": "text",
+      "content": "Execution model: messages are applied in order. Context messages update the session transcript. harmony-script messages may call tools; their results are stored as artifacts and may update vars."
+    },
+    {
+      "role": "user",
+      "channel": "analysis",
+      "contentType": "text",
+      "content": "I’m near Times Square. Find two coffee shops within walking distance and propose a quick comparison (vibe + wifi)."
+    },
+    {
+      "role": "assistant",
+      "channel": "commentary",
+      "recipient": "orchestrator.plan",
+      "contentType": "harmony-script",
+      "termination": "end",
+      "content": {
+        "vars": {
+          "maxResults": 2,
+          "radiusMeters": 900
+        },
+        "steps": [
+          {
+            "type": "extract-input",
+            "output": {
+              "userText": "$input.text"
+            }
+          },
+          {
+            "type": "assistant-message",
+            "channel": "analysis",
+            "content_template": "Got it. I’ll search nearby coffee shops and summarize {{vars.maxResults}} options."
+          },
+          {
+            "type": "tool-call",
+            "recipient": "maps.search",
+            "channel": "commentary",
+            "args": {
+              "query": "coffee shop near Times Square",
+              "radiusMeters": "$vars.radiusMeters",
+              "limit": "$vars.maxResults"
+            },
+            "save_as": "places"
+          },
+          {
+            "type": "if",
+            "condition": "$len($vars.places) > 0",
+            "then": [
+              {
+                "type": "assistant-message",
+                "channel": "analysis",
+                "content_template": "Found results. Pulling a couple of details (wifi + vibe) before summarizing."
+              },
+              {
+                "type": "tool-call",
+                "recipient": "reviews.summarize",
+                "channel": "commentary",
+                "args": {
+                  "places": "$vars.places",
+                  "focus": "vibe, wifi",
+                  "maxItems": "$vars.maxResults"
+                },
+                "save_as": "summaries"
+              },
+              {
+                "type": "assistant-message",
+                "channel": "final",
+                "content_template": "Here are two options near Times Square:\n\n{{vars.summaries}}\n\nIf you tell me your exact corner (or cross streets), I can tighten the walking route."
+              }
+            ],
+            "else": [
+              {
+                "type": "assistant-message",
+                "channel": "final",
+                "content_template": "I couldn’t find any nearby results with the current constraints. If you share a nearby landmark, I can retry."
+              },
+              { "type": "halt" }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

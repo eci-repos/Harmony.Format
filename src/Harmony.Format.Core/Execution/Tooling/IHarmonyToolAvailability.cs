@@ -21,7 +21,7 @@ public interface IHarmonyToolAvailability
 /// <summary>
 /// Default permissive implementation: does not block execution.
 /// </summary>
-public sealed class AllowAllToolAvailability : IHarmonyToolAvailability
+public class AllowAllToolAvailability : IHarmonyToolAvailability
 {
    public Task<bool> IsAvailableAsync(string recipient, CancellationToken ct = default)
       => Task.FromResult(true);

@@ -9,7 +9,10 @@ namespace Harmony.Format;
 
 public class HarmonyError
 {
-   public string Code { get; set; } = "HRF_VALIDATION_FAILED";
+   public const string VALIDATION_FAILED = "HRF_VALIDATION_FAILED";
+   public const string MISSING_TOOL = "MISSING_TOOL";
+
+   public string Code { get; set; } = VALIDATION_FAILED;
    public string Message { get; set; } = string.Empty;
    public object? Details { get; set; }
 }

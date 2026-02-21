@@ -1,0 +1,57 @@
+{
+  "hrfVersion": "1.0.0",
+  "messages": [
+    {
+      "role": "system",
+      "channel": "analysis",
+      "contentType": "text",
+      "content": "You are an enterprise assistant. Follow HRF. If tools are unavailable, explain what is blocked and what is needed."
+    },
+    {
+      "role": "user",
+      "channel": "analysis",
+      "contentType": "text",
+      "content": "Summarize the latest project risks from the repo issues and propose mitigations."
+    },
+    {
+      "role": "assistant",
+      "channel": "commentary",
+      "contentType": "harmony-script",
+      "termination": "end",
+      "content": {
+        "steps": [
+          {
+            "type": "extract-input",
+            "output": {
+              "userQuery": "$input.text"
+            }
+          },
+          {
+            "type": "tool-call",
+            "recipient": "repo.issues_list",
+            "channel": "commentary",
+            "args": {
+              "state": "open",
+              "limit": 20
+            },
+            "save_as": "issues"
+          },
+          {
+            "type": "tool-call",
+            "recipient": "risk.analyze",
+            "channel": "commentary",
+            "args": {
+              "items": "$vars.issues"
+            },
+            "save_as": "risks"
+          },
+          {
+            "type": "assistant-message",
+            "channel": "final",
+            "content_template": "Blocked: required tools are not available to retrieve/analyze issues.\n\nMissing tools (example): repo.issues_list, risk.analyze\n\nTo proceed, enable/provide those tools (via MCP) or paste the issue list here and I’ll analyze it without tools."
+          }
+        ]
+      }
+    }
+  ]
+}

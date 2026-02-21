@@ -31,9 +31,10 @@ public sealed partial class HarmonyExecutionService
    private readonly HarmonyExecutor _executor;
    private readonly IToolExecutionService _toolRouter;
    private readonly IHarmonySessionLockProvider _locks;
-   private readonly IHarmonySessionIndexStore _sessionIndexStore;
+   private readonly IHarmonySessionIndexStore _sessionIndex;
    private readonly IHarmonyToolAvailability _toolAvailability; 
    private readonly HarmonyPreflightAnalyzer _preflight;
+   private readonly IHarmonyToolRegistry? _toolRegistry;
 
    public HarmonyExecutionService(
       IHarmonyScriptStore scriptStore,
@@ -42,16 +43,23 @@ public sealed partial class HarmonyExecutionService
       IToolExecutionService toolRouter,
       IHarmonySessionLockProvider locks,
       IHarmonySessionIndexStore sessionIndex,
-      IHarmonyToolAvailability? toolAvailability = null)
+      IHarmonyToolAvailability? toolAvailability = null,
+      IHarmonyToolRegistry? toolRegistry = null)
    {
       _scriptStore = scriptStore ?? throw new ArgumentNullException(nameof(scriptStore));
       _sessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
       _executor = executor ?? throw new ArgumentNullException(nameof(executor));
       _toolRouter = toolRouter ?? throw new ArgumentNullException(nameof(toolRouter));
       _locks = locks ?? throw new ArgumentNullException(nameof(locks));
-      _sessionIndexStore = sessionIndex ?? throw new ArgumentNullException(nameof(sessionIndex));
+      _sessionIndex = sessionIndex ?? throw new ArgumentNullException(nameof(sessionIndex));
 
-      _toolAvailability = toolAvailability ?? new AllowAllToolAvailability();
+      // Prefer explicit availability, else derive from registry, else default.
+      _toolAvailability =
+         toolAvailability
+         ?? (toolRegistry is not null
+               ? new RegistryBackedToolAvailability(toolRegistry)
+               : DenyAllToolAvailability.Instance); //AllowAllToolAvailability());
+
       _preflight = new HarmonyPreflightAnalyzer(_toolAvailability);
    }
 
@@ -70,6 +78,12 @@ public sealed partial class HarmonyExecutionService
          throw new InvalidOperationException($"Script '{scriptId}' was not found.");
       return envelope;
    }
+
+   public Task<IReadOnlyList<HarmonyToolDescriptor>> ListKnownToolsAsync(
+      CancellationToken ct = default)
+         => _toolRegistry?.ListAsync(ct) ?? 
+            Task.FromResult<IReadOnlyList<HarmonyToolDescriptor>>(
+               Array.Empty<HarmonyToolDescriptor>());
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -90,11 +104,10 @@ public sealed partial class HarmonyExecutionService
    /// completion) and record outputs, then mark the session completed.
    /// </summary>
    public async Task<HarmonyMessageExecutionRecord> ExecuteNextAsync(
-   string sessionId,
-   int index = -1, // Optional override for current index...if -1, we use session.CurrentIndex
-   IDictionary<string, object?>? input = null,
-   string? executionId = null,
-   CancellationToken ct = default)
+      string sessionId,
+      IDictionary<string, object?>? input = null,
+      string? executionId = null,
+      CancellationToken ct = default)
    {
       using var _ = await _locks.AcquireAsync(sessionId, ct).ConfigureAwait(false);
       var session = await RequireSessionAsync(sessionId, ct).ConfigureAwait(false);
@@ -125,9 +138,6 @@ public sealed partial class HarmonyExecutionService
 
       // Load envelope once (and reuse)
       var envelope = await RequireScriptAsync(session.ScriptId, ct).ConfigureAwait(false);
-
-      if (index < 0 || index >= envelope.Messages.Count)
-         throw new ArgumentOutOfRangeException(nameof(index), "Message index is out of range.");
 
       // If out of range, mark completed and return
       if (session.CurrentIndex < 0 || session.CurrentIndex >= envelope.Messages.Count)
@@ -462,38 +472,33 @@ public sealed partial class HarmonyExecutionService
          //    chat history rebuilt from transcript, then append assistant final.
          if (IsHarmonyScript(msg))
          {
-            var preflight = await _preflight.AnalyzeAsync(envelope, ct).ConfigureAwait(false); ;
+            var preflight = await _preflight.AnalyzeAsync(envelope, ct);
             if (!preflight.IsReady)
             {
-               // 1) Compact transcript marker (optional but recommended)
+               // Session + record state
+               record.Status = HarmonyExecutionStatus.Blocked;   // your renamed enum
+               session.Status = HarmonySessionStatus.Blocked;
+               record.CompletedAt = DateTimeOffset.UtcNow;
+
+               // Explain why
+               record.Logs.Add("Preflight blocked execution due to missing tools.");
+               record.Logs.Add($"Missing recipients: " +
+                  $"{string.Join(", ", preflight.MissingRecipients)}");
+
+               // Optional transcript breadcrumb (keeps transcript readable)
                AppendToTranscript(
                   session,
                   role: "system",
-                  content: HarmonyTranscriptWriter.PreflightBlockedSummary(preflight.MissingRecipients.Count),
+                  content: HarmonyTranscriptWriter.PreflightBlockedSummary(
+                     preflight.MissingRecipients.Count),
                   sourceIndex: index);
 
-               // 2) Structured artifact for MCP/UI
-               record.Outputs.Add(new HarmonyArtifact
-               {
-                  Name = "preflight",
-                  ContentType = "preflight",
-                  Content = JsonSerializer.SerializeToElement(preflight),
-                  Producer = "preflight"
-               });
-
-               // 3) Mark record + session
-               record.Status = HarmonyExecutionStatus.Blocked;
-               record.CompletedAt = DateTimeOffset.UtcNow;
-
-               session.Status = HarmonySessionStatus.Blocked;
-               session.CurrentIndex = Math.Max(session.CurrentIndex, index); // do NOT advance on blocked
-               session.UpdatedAt = DateTimeOffset.UtcNow;
-
-               // 4) Persist history + idempotency index
+               // Persist
                session.History.Add(record);
                if (!string.IsNullOrWhiteSpace(record.ExecutionId))
                   session.ExecutionIdIndex[record.ExecutionId] = session.History.Count - 1;
 
+               session.UpdatedAt = DateTimeOffset.UtcNow;
                await _sessionStore.SaveAsync(session, ct).ConfigureAwait(false);
                return record;
             }

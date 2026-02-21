@@ -27,7 +27,7 @@ public sealed partial class HarmonyExecutionService
 		CancellationToken ct = default)
 	{
 		var record = await ExecuteNextAsync(
-			sessionId, -1, input, executionId, ct).ConfigureAwait(false);
+			sessionId, input, executionId, ct).ConfigureAwait(false);
 		var session = await RequireSessionAsync(sessionId, ct).ConfigureAwait(false);
 
 		return ToMcpResponse(session, record);
