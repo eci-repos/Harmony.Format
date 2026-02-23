@@ -5,6 +5,10 @@ using Harmony.Format.Execution.Session;
 using Harmony.Format.Execution.Storage;
 using Harmony.Format.Execution.Tooling;
 using Harmony.Format.Execution.Transcript;
+using Harmony.Tooling.Models;
+using Harmony.Tooling.Discovery;
+using Harmony.Tooling.Contracts;
+
 using System;
 using System.Collections.Generic;
 using System.Reflection;
@@ -32,9 +36,9 @@ public sealed partial class HarmonyExecutionService
    private readonly IToolExecutionService _toolRouter;
    private readonly IHarmonySessionLockProvider _locks;
    private readonly IHarmonySessionIndexStore _sessionIndex;
-   private readonly IHarmonyToolAvailability _toolAvailability; 
+   private readonly IToolAvailability _toolAvailability; 
    private readonly HarmonyPreflightAnalyzer _preflight;
-   private readonly IHarmonyToolRegistry? _toolRegistry;
+   private readonly IToolRegistry? _toolRegistry;
 
    public HarmonyExecutionService(
       IHarmonyScriptStore scriptStore,
@@ -43,8 +47,8 @@ public sealed partial class HarmonyExecutionService
       IToolExecutionService toolRouter,
       IHarmonySessionLockProvider locks,
       IHarmonySessionIndexStore sessionIndex,
-      IHarmonyToolAvailability? toolAvailability = null,
-      IHarmonyToolRegistry? toolRegistry = null)
+      IToolAvailability? toolAvailability = null,
+      IToolRegistry? toolRegistry = null)
    {
       _scriptStore = scriptStore ?? throw new ArgumentNullException(nameof(scriptStore));
       _sessionStore = sessionStore ?? throw new ArgumentNullException(nameof(sessionStore));
@@ -53,12 +57,14 @@ public sealed partial class HarmonyExecutionService
       _locks = locks ?? throw new ArgumentNullException(nameof(locks));
       _sessionIndex = sessionIndex ?? throw new ArgumentNullException(nameof(sessionIndex));
 
+      _toolRegistry = toolRegistry; // optional, only needed if not using explicit tool availability
+
       // Prefer explicit availability, else derive from registry, else default.
       _toolAvailability =
          toolAvailability
          ?? (toolRegistry is not null
-               ? new RegistryBackedToolAvailability(toolRegistry)
-               : DenyAllToolAvailability.Instance); //AllowAllToolAvailability());
+               ? new RegistryToolAvailability(toolRegistry)
+               : new DenyAllToolAvailability()); //AllowAllToolAvailability());
 
       _preflight = new HarmonyPreflightAnalyzer(_toolAvailability);
    }
@@ -79,11 +85,12 @@ public sealed partial class HarmonyExecutionService
       return envelope;
    }
 
-   public Task<IReadOnlyList<HarmonyToolDescriptor>> ListKnownToolsAsync(
+   public async Task<IEnumerable<ToolDescriptor>> ListKnownToolsAsync(
       CancellationToken ct = default)
-         => _toolRegistry?.ListAsync(ct) ?? 
-            Task.FromResult<IReadOnlyList<HarmonyToolDescriptor>>(
-               Array.Empty<HarmonyToolDescriptor>());
+   {
+      return _toolRegistry != null ? _toolRegistry.List() :
+           Enumerable.Empty<ToolDescriptor>();
+   }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -473,37 +480,41 @@ public sealed partial class HarmonyExecutionService
          if (IsHarmonyScript(msg))
          {
             var preflight = await _preflight.AnalyzeAsync(envelope, ct);
-            if (!preflight.IsReady)
+            if (!preflight.IsSuccessful)
             {
-               // Session + record state
-               record.Status = HarmonyExecutionStatus.Blocked;   // your renamed enum
-               session.Status = HarmonySessionStatus.Blocked;
-               record.CompletedAt = DateTimeOffset.UtcNow;
-
-               // Explain why
-               record.Logs.Add("Preflight blocked execution due to missing tools.");
-               record.Logs.Add($"Missing recipients: " +
-                  $"{string.Join(", ", preflight.MissingRecipients)}");
-
-               // Optional transcript breadcrumb (keeps transcript readable)
+               // Add a compact transcript line so the transcript reflects why execution stopped.
                AppendToTranscript(
                   session,
                   role: "system",
                   content: HarmonyTranscriptWriter.PreflightBlockedSummary(
-                     preflight.MissingRecipients.Count),
+                     preflight.Missing.Count),
                   sourceIndex: index);
 
-               // Persist
+               record.Status = HarmonyExecutionStatus.Blocked;
+               record.CompletedAt = DateTimeOffset.UtcNow;
+
+               session.Status = HarmonySessionStatus.Blocked;
+               session.UpdatedAt = DateTimeOffset.UtcNow;
+
+               record.Logs.Add(
+                  $"Preflight blocked execution. Missing tools: " +
+                  $"{string.Join(", ", preflight.Missing)}");
+
                session.History.Add(record);
+
+               // Register executionId for dedupe (only if provided)
                if (!string.IsNullOrWhiteSpace(record.ExecutionId))
                   session.ExecutionIdIndex[record.ExecutionId] = session.History.Count - 1;
 
-               session.UpdatedAt = DateTimeOffset.UtcNow;
                await _sessionStore.SaveAsync(session, ct).ConfigureAwait(false);
                return record;
             }
 
             record.Logs.Add("Executing harmony-script with session transcript as chat history.");
+
+            // Make sure the transcript contains the system/user context that precedes this executable
+            // message. This helps replay/debugging and makes single-step execution self-contained.
+            EnsureTranscriptIncludesPriorContext(session, envelope, index);
 
             // Build the prompt-ready chat history from the durable transcript
             var chatHistory = BuildChatHistoryFromSessionTranscript(session);
@@ -647,6 +658,45 @@ public sealed partial class HarmonyExecutionService
 
          return record;
       }
+   }
+
+   /// <summary>
+   /// Ensures that all prior context-only messages up to the specified index are included in 
+   /// the session transcript.
+   /// </summary>
+   /// <param name="session"></param>
+   /// <param name="envelope"></param>
+   /// <param name="upToExclusiveIndex"></param>
+   /// <exception cref="ArgumentNullException"></exception>
+   private static void EnsureTranscriptIncludesPriorContext(
+      HarmonySession session,
+      HarmonyEnvelope envelope,
+      int upToExclusiveIndex)
+   {
+      if (session is null) throw new ArgumentNullException(nameof(session));
+      if (envelope is null) throw new ArgumentNullException(nameof(envelope));
+
+      if (upToExclusiveIndex <= 0) return;
+
+      // Fast-ish dedupe by SourceIndex (we use SourceIndex for traceability already)
+      var existing = new HashSet<int>(
+         session.Transcript
+            .Where(t => t.SourceIndex.HasValue)
+            .Select(t => t.SourceIndex!.Value));
+
+      for (int i = 0; i < upToExclusiveIndex && i < envelope.Messages.Count; i++)
+      {
+         if (existing.Contains(i)) continue;
+
+         var m = envelope.Messages[i];
+         if (!IsContextOnly(m)) continue;
+
+         var text = GetMessageText(m);
+         if (string.IsNullOrWhiteSpace(text)) continue;
+
+         AppendToTranscript(session, role: m.Role, content: text, sourceIndex: i);
+      }
+
    }
 
    // Helpers

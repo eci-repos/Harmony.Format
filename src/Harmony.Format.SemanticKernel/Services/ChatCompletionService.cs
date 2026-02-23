@@ -5,7 +5,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Harmony.Format.Core;
 
 // -------------------------------------------------------------------------------------------------
 namespace Harmony.Format.SemanticKernel;
@@ -23,6 +22,13 @@ public sealed class ChatCompletionService : ILanguageModelChatService
 
    public async Task<string> GetAssistantReplyAsync(
       ChatConversation history, CancellationToken ct = default)
+   {
+      return await GetAssistantReplyAsync(history, null, ct);
+   }
+
+   public async Task<string> GetAssistantReplyAsync(
+      ChatConversation history, Func<ChatMessage, bool> modelFilter, 
+      CancellationToken ct = default)
    {
       var skHistory = new ChatHistory();
 

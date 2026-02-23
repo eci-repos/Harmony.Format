@@ -1,0 +1,244 @@
+﻿{
+   "$id": "https://example.org/harmony-envelope.schema.json",
+   "$schema": "https://json-schema.org/draft/2020-12/schema",
+   "title": "HarmonyEnvelope (HRF)",
+   "type": "object",
+   "description": "Harmony Response Format (HRF) envelope containing one or more messages.",
+   "properties": {
+      "hrfVersion": {
+         "type": "string",
+         "description": "Harmony Runtime Format version",
+         "pattern": "^1\\.0\\.0$"
+      },
+      "messages": {
+         "type": "array",
+         "minItems": 1,
+         "items": { "$ref": "#/$defs/Message" }
+      }
+   },
+   "required": [ "hrfVersion", "messages" ],
+   "unevaluatedProperties": false,
+
+   "$defs": {
+      "Role": {
+         "type": "string",
+         "enum": [ "system", "developer", "user", "assistant", "tool" ]
+      },
+
+      "Channel": {
+         "type": "string",
+         "enum": [ "analysis", "commentary", "final" ]
+      },
+
+      "ContentType": {
+         "type": "string",
+         "enum": [ "text", "json", "harmony-script" ]
+      },
+
+      "Termination": {
+         "description": "Assistant commentary tool-calls use 'call', tool results may use 'return', and a tool phase may end with 'end'. Elsewhere this can be null/omitted.",
+         "type": [ "string", "null" ],
+         "enum": [ "call", "return", "end", null ]
+      },
+
+      "Message": {
+         "title": "HRF Message",
+         "type": "object",
+         "description": "A single HRF message.",
+         "properties": {
+            "role": { "$ref": "#/$defs/Role" },
+            "channel": { "$ref": "#/$defs/Channel" },
+
+            "recipient": {
+               "type": "string",
+               "description": "Required only for assistant commentary tool calls (plugin.function).",
+               "pattern": "^[a-zA-Z0-9_\\-]+\\.[a-zA-Z0-9_\\-]+$"
+            },
+
+            "contentType": { "$ref": "#/$defs/ContentType" },
+
+            "termination": { "$ref": "#/$defs/Termination" },
+
+            "content": {
+               "description": "Message payload: text or structured object; Harmony Script for orchestration."
+            }
+         },
+
+         "required": [ "role", "channel", "content" ],
+
+         "allOf": [
+            {
+               "description": "If contentType is present, enforce the discriminator.",
+               "if": { "required": [ "contentType" ] },
+               "then": {
+                  "allOf": [
+                     {
+                        "if": { "properties": { "contentType": { "const": "text" } } },
+                        "then": { "properties": { "content": { "type": "string" } } }
+                     },
+                     {
+                        "if": { "properties": { "contentType": { "const": "json" } } },
+                        "then": { "properties": { "content": { "type": "object" } } }
+                     },
+                     {
+                        "if": { "properties": { "contentType": { "const": "harmony-script" } } },
+                        "then": { "properties": { "content": { "$ref": "#/$defs/HarmonyScript" } } }
+                     }
+                  ]
+               }
+            },
+            {
+               "description": "If contentType is omitted, allow any valid content shape (text, json object, or HarmonyScript).",
+               "if": { "not": { "required": [ "contentType" ] } },
+               "then": {
+                  "anyOf": [
+                     { "properties": { "content": { "type": "string" } } },
+                     { "properties": { "content": { "type": "object" } } },
+                     { "properties": { "content": { "$ref": "#/$defs/HarmonyScript" } } }
+                  ]
+               }
+            },
+            {
+               "description": "Assistant commentary tool-calls must include recipient and a non-null termination of {call, return, end}.",
+               "if": {
+                  "properties": {
+                     "role": { "const": "assistant" },
+                     "channel": { "const": "commentary" }
+                  },
+                  "required": [ "role", "channel" ]
+               },
+               "then": {
+                  "required": [ "recipient", "termination" ],
+                  "properties": {
+                     "termination": {
+                        "type": "string",
+                        "enum": [ "call", "return", "end" ]
+                     }
+                  }
+               }
+            }
+         ],
+
+         "unevaluatedProperties": false
+      },
+
+      "HarmonyScript": {
+         "title": "HarmonyScript",
+         "type": "object",
+         "description": "Structured orchestration steps for tools and assistant messages.",
+         "properties": {
+            "vars": {
+               "type": "object",
+               "description": "Arbitrary variables (name -> value/expression).",
+               "additionalProperties": true
+            },
+            "steps": {
+               "type": "array",
+               "minItems": 1,
+               "items": { "$ref": "#/$defs/Step" }
+            }
+         },
+         "required": [ "steps" ],
+         "unevaluatedProperties": false
+      },
+
+      "Step": {
+         "title": "HarmonyScript Step",
+         "type": "object",
+         "oneOf": [
+            { "$ref": "#/$defs/ExtractInputStep" },
+            { "$ref": "#/$defs/ToolCallStep" },
+            { "$ref": "#/$defs/IfStep" },
+            { "$ref": "#/$defs/AssistantMessageStep" },
+            { "$ref": "#/$defs/HaltStep" }
+         ],
+         "unevaluatedProperties": false
+      },
+
+      "ExtractInputStep": {
+         "type": "object",
+         "properties": {
+            "type": { "const": "extract-input" },
+            "output": {
+               "type": "object",
+               "description": "Map of variable name -> expression (e.g., $input.text).",
+               "additionalProperties": { "type": "string" }
+            }
+         },
+         "required": [ "type", "output" ],
+         "unevaluatedProperties": false
+      },
+
+      "ToolCallStep": {
+         "type": "object",
+         "properties": {
+            "type": { "const": "tool-call" },
+            "recipient": {
+               "type": "string",
+               "pattern": "^[a-zA-Z0-9_\\-]+\\.[a-zA-Z0-9_\\-]+$"
+            },
+            "channel": { "const": "commentary" },
+            "args": {
+               "type": "object",
+               "description": "Tool arguments.",
+               "additionalProperties": true
+            },
+            "save_as": {
+               "type": "string",
+               "description": "Optional variable name to store tool results."
+            }
+         },
+         "required": [ "type", "recipient", "channel", "args" ],
+         "unevaluatedProperties": false
+      },
+
+      "IfStep": {
+         "type": "object",
+         "properties": {
+            "type": { "const": "if" },
+            "condition": {
+               "type": "string",
+               "description": "Boolean expression over vars (e.g., $vars.places.length > 0)."
+            },
+            "then": {
+               "type": "array",
+               "items": { "$ref": "#/$defs/Step" }
+            },
+            "else": {
+               "type": "array",
+               "items": { "$ref": "#/$defs/Step" }
+            }
+         },
+         "required": [ "type", "condition", "then", "else" ],
+         "unevaluatedProperties": false
+      },
+
+      "AssistantMessageStep": {
+         "type": "object",
+         "properties": {
+            "type": { "const": "assistant-message" },
+            "channel": { "$ref": "#/$defs/Channel" },
+            "content": { "type": "string" },
+            "content_template": {
+               "type": "string",
+               "description": "Template string alternative to 'content'."
+            }
+         },
+         "required": [ "type", "channel" ],
+         "oneOf": [
+            { "required": [ "content" ] },
+            { "required": [ "content_template" ] }
+         ],
+         "unevaluatedProperties": false
+      },
+
+      "HaltStep": {
+         "type": "object",
+         "properties": {
+            "type": { "const": "halt" }
+         },
+         "required": [ "type" ],
+         "unevaluatedProperties": false
+      }
+   }
+}

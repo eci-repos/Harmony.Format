@@ -10,4 +10,7 @@
     <Project Path="src/Harmony.Format.Core/Harmony.Format.Core.csproj" />
     <Project Path="src/Harmony.Format.SemanticKernel/Harmony.Format.SemanticKernel.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Harmony.Format.Tests/Harmony.Format.Tests.csproj" Id="c4268b61-8866-4655-87a2-bce33b4fee1b" />
+  </Folder>
 </Solution>

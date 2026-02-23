@@ -51,12 +51,26 @@ public sealed class InMemoryHarmonySessionStore :
       return Task.FromResult(session);
    }
 
+   /// <summary>
+   /// Saves the provided HarmonySession to the in-memory store.
+   /// </summary>
+   /// <remarks>This function preserve caller-provided UpdateAt when it's explicitly set 
+   /// (e.g., tests or replay), but still ensure monotonic timestamps during normal saves.</remarks>
+   /// <param name="session"></param>
+   /// <param name="ct"></param>
+   /// <returns></returns>
+   /// <exception cref="ArgumentNullException"></exception>
    public Task SaveAsync(HarmonySession session, CancellationToken ct = default)
    {
       if (session is null)
          throw new ArgumentNullException(nameof(session));
 
-      session.UpdatedAt = DateTimeOffset.UtcNow;
+      var now = DateTimeOffset.UtcNow;
+
+      // Preserve caller-provided UpdatedAt...
+      if (session.UpdatedAt < now)
+         session.UpdatedAt = now;
+
       _sessions[session.SessionId] = session;
       return Task.CompletedTask;
    }

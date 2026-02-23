@@ -8,8 +8,6 @@ using System.Threading.Tasks;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 
-using Harmony.Format.Core;
-
 // -------------------------------------------------------------------------------------------------
 namespace Harmony.Format.SemanticKernel;
 

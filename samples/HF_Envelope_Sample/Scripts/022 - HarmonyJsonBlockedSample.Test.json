@@ -5,71 +5,42 @@
       "role": "system",
       "channel": "analysis",
       "contentType": "text",
-      "content": "You are a Harmony-enabled assistant running under the Harmony Response Format (HRF). Follow the envelope strictly."
-    },
-    {
-      "role": "developer",
-      "channel": "analysis",
-      "contentType": "text",
-      "content": "Goal: demonstrate Harmony.Format MVP session execution: message-by-message processing, transcript building, tool dependency preflight, and blocked execution behavior."
+      "content": "You are a helpful assistant. Follow HRF."
     },
     {
       "role": "user",
       "channel": "analysis",
       "contentType": "text",
-      "content": "Build me a short ‘project pulse’ summary: recent changes, what’s next, and any risks. Keep it crisp."
+      "content": "Find 2 coffee shops near me and format the answer as a tiny itinerary."
     },
     {
       "role": "assistant",
       "channel": "commentary",
-      "recipient": "planner.create",
+      "recipient": "mcp.orchestrator",
       "contentType": "harmony-script",
       "termination": "end",
       "content": {
-        "vars": {
-          "maxBullets": 5,
-          "tone": "executive"
-        },
         "steps": [
           {
             "type": "extract-input",
             "output": {
-              "request": "$input.text"
+              "query": "$input.text"
             }
-          },
-          {
-            "type": "assistant-message",
-            "channel": "analysis",
-            "content_template": "Planning a {{vars.tone}} pulse summary (max {{vars.maxBullets}} bullets). Checking required tools first..."
           },
           {
             "type": "tool-call",
             "recipient": "mcp.search",
             "channel": "commentary",
             "args": {
-              "query": "$vars.request",
-              "limit": 3
+              "query": "$vars.query",
+              "limit": 2
             },
-            "save_as": "searchResults"
-          },
-          {
-            "type": "tool-call",
-            "recipient": "mcp.fetch",
-            "channel": "commentary",
-            "args": {
-              "ids": "$vars.searchResults"
-            },
-            "save_as": "fetchedDocs"
-          },
-          {
-            "type": "assistant-message",
-            "channel": "analysis",
-            "content_template": "Drafting summary from retrieved materials ({{vars.tone}} tone)."
+            "save_as": "places"
           },
           {
             "type": "assistant-message",
             "channel": "final",
-            "content_template": "."
+            "content": "If tools are unavailable, the runtime should block before executing and record why."
           }
         ]
       }
@@ -79,7 +50,7 @@
       "channel": "final",
       "contentType": "text",
       "termination": "return",
-      "content": "Blocked: this script requires tools that are not currently available (mcp.search, mcp.fetch). Once those tools are registered/available via the host (e.g., MCP server), re-run the same session step to proceed."
+      "content": "."
     }
   ]
 }

@@ -121,7 +121,6 @@ public sealed class HarmonyExecutor
       // Execute steps sequentially
       try
       {
-         var processedMessageCount = 0;
          if (script?.Steps is null || script.Steps.Count == 0)
          {
             return HarmonyExecutionResult.ErrorResult(
@@ -134,23 +133,23 @@ public sealed class HarmonyExecutor
             if (halted) break;
 
             // Only check NEW messages since last check
-            while (processedMessageCount < envelope.Messages.Count)
-            {
-               var msg = envelope.Messages[processedMessageCount++];
-               if (string.Equals(msg.Role, "assistant", StringComparison.OrdinalIgnoreCase))
-               {
-                  switch (msg.Termination)
-                  {
-                     case HarmonyTermination.end:
-                        return Finalize(execCtx, "Execution ended by termination marker.");
-                     case HarmonyTermination.@return:
-                        return Finalize(execCtx, execCtx.FinalText);
-                     case HarmonyTermination.call:
-                        await HandleToolCallAsync(execCtx, msg, ct);
-                        break;
-                  }
-               }
-            }
+            //while (processedMessageCount < envelope.Messages.Count)
+            //{
+            //   var msg = envelope.Messages[processedMessageCount++];
+            //   if (string.Equals(msg.Role, "assistant", StringComparison.OrdinalIgnoreCase))
+            //   {
+            //      switch (msg.Termination)
+            //      {
+            //         case HarmonyTermination.end:
+            //            return Finalize(execCtx, "Execution ended by termination marker.");
+            //         case HarmonyTermination.@return:
+            //            return Finalize(execCtx, execCtx.FinalText);
+            //         case HarmonyTermination.call:
+            //            await HandleToolCallAsync(execCtx, msg, ct);
+            //            break;
+            //      }
+            //   }
+            //}
          }
       }
       catch (Exception ex) 
@@ -439,8 +438,8 @@ public sealed class HarmonyExecutor
       // Evaluate arguments (expressions -> concrete values)
       var argsDict = EvaluateToolArgs(ctx, step);
 
-      // Invoke tool via router (this is where InvokeToolAsync goes)
-      var result = await _toolRouter.InvokeToolAsync(step.Recipient, argsDict, ct);
+      // Invoke tool via the *context* router so overrides (recording/tracing) work
+      var result = await ctx.ToolRouter.InvokeToolAsync(step.Recipient, argsDict, ct);
 
       // Store result in vars under step.SaveAs
       ctx.Vars[step.SaveAs] = result;

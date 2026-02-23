@@ -5,53 +5,64 @@
       "role": "system",
       "channel": "analysis",
       "contentType": "text",
-      "content": "You are an enterprise assistant. Follow HRF. If tools are unavailable, explain what is blocked and what is needed."
+      "content": "You are a helpful assistant. Follow HRF."
     },
     {
       "role": "user",
       "channel": "analysis",
       "contentType": "text",
-      "content": "Summarize the latest project risks from the repo issues and propose mitigations."
+      "content": "I’m planning a short NYC coffee crawl. Find 2 standout shops and summarize why they’re worth visiting."
     },
     {
       "role": "assistant",
       "channel": "commentary",
+      "recipient": "mcp.orchestrator",
       "contentType": "harmony-script",
       "termination": "end",
       "content": {
+        "vars": {
+          "limit": 2
+        },
         "steps": [
           {
             "type": "extract-input",
             "output": {
-              "userQuery": "$input.text"
+              "query": "$input.text"
             }
           },
           {
             "type": "tool-call",
-            "recipient": "repo.issues_list",
+            "recipient": "mcp.search",
             "channel": "commentary",
             "args": {
-              "state": "open",
-              "limit": 20
+              "query": "$vars.query",
+              "limit": 2
             },
-            "save_as": "issues"
+            "save_as": "places"
           },
           {
             "type": "tool-call",
-            "recipient": "risk.analyze",
+            "recipient": "mcp.summarize",
             "channel": "commentary",
             "args": {
-              "items": "$vars.issues"
+              "items": "$vars.places"
             },
-            "save_as": "risks"
+            "save_as": "summary"
           },
           {
             "type": "assistant-message",
             "channel": "final",
-            "content_template": "Blocked: required tools are not available to retrieve/analyze issues.\n\nMissing tools (example): repo.issues_list, risk.analyze\n\nTo proceed, enable/provide those tools (via MCP) or paste the issue list here and I’ll analyze it without tools."
+            "content_template": "Here are two coffee stops to consider:\\n\\n{{vars.summary}}"
           }
         ]
       }
+    },
+    {
+      "role": "assistant",
+      "channel": "final",
+      "contentType": "text",
+      "termination": "return",
+      "content": "."
     }
   ]
 }

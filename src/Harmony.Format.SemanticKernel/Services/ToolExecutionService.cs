@@ -5,8 +5,6 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.SemanticKernel;
 
-using Harmony.Format.Core;
-
 // -------------------------------------------------------------------------------------------------
 namespace Harmony.Format.SemanticKernel;
 

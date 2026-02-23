@@ -4,8 +4,16 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+using Harmony.Format.Execution.History;
+using Harmony.Format.Execution.Session;
+using Harmony.Format.Execution.Storage;
+using Harmony.Format.Execution.Tooling;
+using Harmony.Format.Execution.Concurrency;
+using Harmony.Format.Execution.Api;
+using Harmony.Format.Execution;
+
 // -------------------------------------------------------------------------------------------------
-namespace Harmony.Format.Execution.Api;
+namespace Harmony.Format.Execution;
 
 // -------------------------------------------------------------------------------------------------
 // MCP Friendly APIs
@@ -172,7 +180,7 @@ public sealed partial class HarmonyExecutionService
          NextIndex = session.CurrentIndex,
          SessionStatus = session.Status.ToString(),
          Record = record,
-         Outputs = record.Outputs ?? Array.Empty<HarmonyArtifact>(),
+         Outputs = record.Outputs ?? new List<HarmonyArtifact>(),
          Vars = session.Vars ?? new Dictionary<string, object?>()
       };
    }
@@ -189,7 +197,6 @@ public sealed partial class HarmonyExecutionService
 /// ensuring non-blocking behavior during execution.</remarks>
 public sealed partial class HarmonyExecutionService
 {
-	private readonly IHarmonySessionIndexStore _sessionIndex;
 
 	// Add this parameter to your constructor and store it
 	// public HarmonyExecutionService(..., IHarmonySessionIndexStore sessionIndex, ...)
