@@ -8,6 +8,7 @@ using Harmony.Format.Execution.Transcript;
 using Harmony.Tooling.Models;
 using Harmony.Tooling.Discovery;
 using Harmony.Tooling.Contracts;
+using Harmony.Tooling.Llm;
 
 using System;
 using System.Collections.Generic;

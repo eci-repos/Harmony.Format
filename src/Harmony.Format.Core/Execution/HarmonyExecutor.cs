@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 
+using Harmony.Tooling.Llm;
+
 // -------------------------------------------------------------------------------------------------
 namespace Harmony.Format;
 
@@ -175,7 +177,8 @@ public sealed class HarmonyExecutor
          chatHistory.AddSystemMessage(
             "Summarize the results from the executed plan above for the user.");
          execCtx.FinalText = 
-            await _chatService.GetAssistantReplyAsync(execCtx.ChatHistory, ct) ?? string.Empty;
+            await _chatService.GetAssistantReplyAsync(
+               execCtx.ChatHistory.Transcript, ct) ?? string.Empty;
       }
 
       return Finalize(execCtx, execCtx.FinalText);
@@ -545,7 +548,7 @@ public sealed class HarmonyExecutor
 
                // Otherwise, ask LLM to produce final answer given the history
                ctx.FinalText = 
-                  await _chatService.GetAssistantReplyAsync(ctx.ChatHistory, ct);
+                  await _chatService.GetAssistantReplyAsync(ctx.ChatHistory.Transcript, ct);
                return false;
             }
 

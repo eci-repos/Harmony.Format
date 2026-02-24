@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
+using Harmony.Tooling.Llm;
+
 // -------------------------------------------------------------------------------------------------
 namespace Harmony.Format;
 
@@ -12,12 +14,17 @@ namespace Harmony.Format;
 /// </summary>
 public sealed class ChatConversation
 {
-   private readonly List<ChatMessage> _messages = new();
+   private ChatTranscript _chatTranscript = new ChatTranscript();
+
+   public ChatTranscript Transcript
+   {
+      get { return _chatTranscript; }
+   }
 
    /// <summary>
    /// Full message list (may include metadata). Provider adapters can filter as needed.
    /// </summary>
-   public IReadOnlyList<ChatMessage> Messages => _messages;
+   public IList<ChatMessage> Messages => _chatTranscript.Messages;
 
    // Backward-compatible helpers (existing call sites keep working)
    // ----------------------------------------------------------------------------------------------
@@ -37,7 +44,7 @@ public sealed class ChatConversation
    public void Add(ChatMessage message)
    {
       if (message is null) throw new ArgumentNullException(nameof(message));
-      _messages.Add(message);
+      _chatTranscript.Messages.Add(message);
    }
 
    public void AddRange(IEnumerable<ChatMessage> messages)
@@ -45,11 +52,11 @@ public sealed class ChatConversation
       if (messages is null) throw new ArgumentNullException(nameof(messages));
       foreach (var m in messages)
       {
-         if (m is not null) _messages.Add(m);
+         if (m is not null) _chatTranscript.Messages.Add(m);
       }
    }
 
-   public void Clear() => _messages.Clear();
+   public void Clear() => _chatTranscript.Messages.Clear();
 
    /// <summary>
    /// Converts an HRF HarmonyMessage into a ChatMessage and appends it.
@@ -82,10 +89,11 @@ public sealed class ChatConversation
    /// Returns only messages intended to be sent to the language model, applying a default
    /// filtering policy. You may pass a custom predicate to override the policy.
    /// </summary>
-   public IReadOnlyList<ChatMessage> GetModelInputMessages(Func<ChatMessage, bool>? predicate = null)
+   public IReadOnlyList<ChatMessage> GetModelInputMessages(
+      Func<ChatMessage, bool>? predicate = null)
    {
       var filter = predicate ?? DefaultModelFilter;
-      return _messages.Where(filter).ToList();
+      return _chatTranscript.Messages.Where(filter).ToList();
    }
 
    /// <summary>
@@ -107,42 +115,3 @@ public sealed class ChatConversation
    }
 }
 
-/// <summary>
-/// A single chat message with optional HRF metadata.
-/// This enables ChatConversation to preserve HRF semantics (channel/recipient/termination)
-/// without coupling Harmony.Format to any provider.
-/// </summary>
-public sealed class ChatMessage
-{
-   public ChatMessage(
-      string role,
-      string content,
-      string? channel = null,
-      string? contentType = null,
-      string? recipient = null,
-      string? termination = null,
-      int? sourceIndex = null)
-   {
-      Role = role ?? throw new ArgumentNullException(nameof(role));
-      Content = content ?? string.Empty;
-
-      Channel = channel;
-      ContentType = contentType;
-      Recipient = recipient;
-      Termination = termination;
-
-      SourceIndex = sourceIndex;
-      Timestamp = DateTimeOffset.UtcNow;
-   }
-
-   public string Role { get; }
-   public string Content { get; }
-
-   public string? Channel { get; }
-   public string? ContentType { get; }
-   public string? Recipient { get; }
-   public string? Termination { get; }
-
-   public int? SourceIndex { get; }
-   public DateTimeOffset Timestamp { get; }
-}

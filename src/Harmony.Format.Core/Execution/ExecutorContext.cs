@@ -6,6 +6,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
+using Harmony.Tooling.Llm;
+
 // -------------------------------------------------------------------------------------------------
 namespace Harmony.Format;
 

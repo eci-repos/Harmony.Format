@@ -28,4 +28,10 @@
     <ProjectReference Include="..\Harmony.Format.Core\Harmony.Format.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Reference Include="Harmony.Abstractions.Core">
+      <HintPath>..\..\..\Harmony.Abstractions\Harmony.Abstractions.Core\bin\Debug\net10.0\Harmony.Abstractions.Core.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
 </Project>

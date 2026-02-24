@@ -1,12 +1,14 @@
-﻿using System;
+﻿using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.ChatCompletion;
+using Harmony.Tooling.Contracts;
+using Harmony.Tooling.Models;
 
 // -------------------------------------------------------------------------------------------------
 namespace Harmony.Format.SemanticKernel;
@@ -250,6 +252,87 @@ public static class KernelInterop
          }
 
          convo.Messages.Add(toolResultMessage);
+      }
+   }
+
+   /// <summary>
+   /// Executes tool calls asynchronously based on the messages in the conversation, using an 
+   /// <see cref="IToolRegistry"/> to resolve tools instead of a Semantic Kernel instance. 
+   /// </summary>
+   /// <param name="convo"></param>
+   /// <param name="registry"></param>
+   /// <param name="execCtx"></param>
+   /// <param name="ct"></param>
+   /// <returns></returns>
+   /// <exception cref="ArgumentNullException"></exception>
+   public static async Task ExecuteToolCallsAsync(
+       this HarmonyConversation convo,
+       IToolRegistry registry,
+       ToolExecutionContext? execCtx = null,
+       CancellationToken ct = default)
+   {
+      if (convo is null) throw new ArgumentNullException(nameof(convo));
+      var snapshot = (convo.Messages ?? Enumerable.Empty<HarmonyMessage>()).ToList();
+
+      foreach (var m in snapshot)
+      {
+         ct.ThrowIfCancellationRequested();
+
+         if (!string.Equals(m.Role, "assistant", StringComparison.OrdinalIgnoreCase)
+             || m.Channel != HarmonyChannel.commentary
+             || string.IsNullOrWhiteSpace(m.Recipient))
+            continue;
+
+         var recipient = m.Recipient!;
+         var tool = registry.Resolve(recipient);
+
+         if (convo.Messages is null) convo.Messages = new List<HarmonyMessage>();
+
+         if (tool is null)
+         {
+            convo.Messages.Add(new HarmonyMessage
+            {
+               Role = recipient,
+               Channel = HarmonyChannel.commentary,
+               ContentType = "json",
+               Content = JsonSerializer.SerializeToElement(
+                  new { error = "tool_not_found", tool = recipient }),
+               Termination = HarmonyTermination.end
+            });
+            continue;
+         }
+
+         JsonDocument input;
+         if (string.Equals(m.ContentType, "json", StringComparison.OrdinalIgnoreCase) &&
+             m.Content.ValueKind != JsonValueKind.Undefined)
+            input = JsonDocument.Parse(m.Content.GetRawText());
+         else
+            input = JsonDocument.Parse(
+               @"{ ""value"": " + JsonSerializer.Serialize(m.Content.ToString()) + " }");
+
+         var result = await tool.ExecuteAsync(input, execCtx, ct).ConfigureAwait(false);
+
+         convo.Messages.Add(result.Ok
+             ? new HarmonyMessage 
+             { 
+                Role = recipient, 
+                Channel = HarmonyChannel.commentary, 
+                Content = result.Data, 
+                Termination = HarmonyTermination.end 
+             }
+             : new HarmonyMessage
+             {
+                Role = recipient,
+                Channel = HarmonyChannel.commentary,
+                ContentType = "json",
+                Content = JsonSerializer.SerializeToElement(new 
+                { 
+                   error = result.Error?.Code ?? "tool_execution_failed", 
+                   tool = recipient, 
+                   message = result.Error?.Message 
+                }),
+                Termination = HarmonyTermination.end
+             });
       }
    }
 
