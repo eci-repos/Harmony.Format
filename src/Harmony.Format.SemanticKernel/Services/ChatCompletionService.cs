@@ -12,7 +12,6 @@ using Harmony.Tooling.Llm;
 namespace Harmony.Format.SemanticKernel;
 
 
-
 /// <summary>
 /// SK-backed implementation of the host-agnostic ILanguageModelChatService.
 /// Projects Harmony.Tooling.Llm chat models to Semantic Kernel's ChatHistory.
