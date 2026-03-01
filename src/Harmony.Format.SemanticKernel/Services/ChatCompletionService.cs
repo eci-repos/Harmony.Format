@@ -35,11 +35,11 @@ public sealed class ChatCompletionService : ILanguageModelChatService
           => await GetAssistantReplyAsync(transcript, modelFilter: null, ct);
 
    /// <summary>
-   /// Gets an assistant reply using the provided transcript, with an optional model-side message filter.
-   /// Messages filtered out will not be projected into the SK ChatHistory.
+   /// Gets an assistant reply using the provided transcript, with an optional model-side
+   /// message filter. Messages filtered out will not be projected into the SK ChatHistory.
    /// </summary>
    public async Task<string> GetAssistantReplyAsync(ChatTranscript transcript, 
-      Func<ChatMessage, bool> modelFilter, CancellationToken ct = default)
+      Func<ChatMessage, bool>? modelFilter, CancellationToken ct = default)
    {
       if (transcript is null) throw new ArgumentNullException(nameof(transcript));
 
