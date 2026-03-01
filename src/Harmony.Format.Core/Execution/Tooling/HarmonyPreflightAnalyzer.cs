@@ -20,11 +20,16 @@ namespace Harmony.Format.Execution.Tooling;
 public sealed class HarmonyPreflightAnalyzer
 {
    private readonly IToolAvailability _toolAvailability;
+   private readonly IToolDependencyExtractor _toolDependencyExtractor = 
+      new HarmonyToolDependencyExtractor();
 
-   public HarmonyPreflightAnalyzer(IToolAvailability toolAvailability)
+   public HarmonyPreflightAnalyzer(IToolAvailability toolAvailability,
+      IToolDependencyExtractor? toolDependencyExtractor = null)
    {
       _toolAvailability = toolAvailability
          ?? throw new ArgumentNullException(nameof(toolAvailability));
+      _toolDependencyExtractor = toolDependencyExtractor
+         ?? _toolDependencyExtractor; // Use default extractor if none provided
    }
 
    /// <summary>
@@ -50,7 +55,7 @@ public sealed class HarmonyPreflightAnalyzer
       if (envelope is null)
          throw new ArgumentNullException(nameof(envelope));
 
-      var recipients = HarmonyToolDependencyExtractor.ExtractRecipients(envelope);
+      var recipients = await _toolDependencyExtractor.ExtractRecipientsAsync(envelope);
 
       ToolPreflightAnalyzer analyzer = new(_toolAvailability);
       return await analyzer.AnalyzeAsync(

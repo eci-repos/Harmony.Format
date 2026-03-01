@@ -10,7 +10,7 @@
     <PackageOutputPath>c:\NuGetLocalFeed</PackageOutputPath>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <Version>1.0.3</Version>
+    <Version>1.0.4</Version>
     <RootNamespace>Harmony.Format</RootNamespace>
   </PropertyGroup>
 
@@ -22,8 +22,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="JsonSchema.Net" Version="8.0.4" />
-    <PackageReference Include="JsonSchema.Net.Data" Version="8.0.0" />
+    <PackageReference Include="Harmony.Abstractions.Core" Version="1.0.2" />
+    <PackageReference Include="JsonSchema.Net" Version="9.1.1" />
+    <PackageReference Include="JsonSchema.Net.Data" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup>

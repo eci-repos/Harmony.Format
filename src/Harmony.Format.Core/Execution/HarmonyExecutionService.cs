@@ -9,6 +9,7 @@ using Harmony.Tooling.Models;
 using Harmony.Tooling.Discovery;
 using Harmony.Tooling.Contracts;
 using Harmony.Tooling.Llm;
+using Harmony.Tooling.Scripts;
 
 using System;
 using System.Collections.Generic;
@@ -31,7 +32,7 @@ namespace Harmony.Format.Execution;
 /// </summary>
 public sealed partial class HarmonyExecutionService
 {
-   private readonly IHarmonyScriptStore _scriptStore;
+   private readonly IScriptStore _scriptStore;
    private readonly IHarmonySessionStore _sessionStore;
    private readonly HarmonyExecutor _executor;
    private readonly IToolExecutionService _toolRouter;
@@ -42,7 +43,7 @@ public sealed partial class HarmonyExecutionService
    private readonly IToolRegistry? _toolRegistry;
 
    public HarmonyExecutionService(
-      IHarmonyScriptStore scriptStore,
+      IScriptStore scriptStore,
       IHarmonySessionStore sessionStore,
       HarmonyExecutor executor,
       IToolExecutionService toolRouter,
@@ -80,7 +81,8 @@ public sealed partial class HarmonyExecutionService
 
    private async Task<HarmonyEnvelope> RequireScriptAsync(string scriptId, CancellationToken ct)
    {
-      var envelope = await _scriptStore.GetAsync(scriptId, ct).ConfigureAwait(false);
+      var envelope = await _scriptStore.GetAsync<HarmonyEnvelope>(
+         scriptId, ct).ConfigureAwait(false);
       if (envelope is null)
          throw new InvalidOperationException($"Script '{scriptId}' was not found.");
       return envelope;
@@ -285,7 +287,8 @@ public sealed partial class HarmonyExecutionService
          throw new ArgumentException("scriptId must be provided.", nameof(scriptId));
 
       // Ensure script exists (fail fast)
-      var envelope = await _scriptStore.GetAsync(scriptId, ct).ConfigureAwait(false);
+      var envelope = await _scriptStore.GetAsync<HarmonyEnvelope>(
+         scriptId, ct).ConfigureAwait(false);
       if (envelope is null)
          throw new InvalidOperationException($"Script '{scriptId}' was not found.");
 
@@ -408,7 +411,8 @@ public sealed partial class HarmonyExecutionService
       if (session is null) throw new ArgumentNullException(nameof(session));
 
       // Allow caller to pass envelope or let service load it.
-      envelope = envelope ?? await _scriptStore.GetAsync(session.ScriptId, ct).ConfigureAwait(false);
+      envelope = envelope ?? await _scriptStore.GetAsync<HarmonyEnvelope>(
+         session.ScriptId, ct).ConfigureAwait(false);
       if (envelope is null)
          throw new InvalidOperationException("Script not found.");
 
